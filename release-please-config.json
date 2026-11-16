@@ -1,11 +1,11 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "bootstrap-sha": "2a673539a3f336cd8dce23d0b3be30641445d8c5",
   "include-component-in-tag": false,
   "packages": {
     ".": {
       "release-type": "simple",
       "package-name": "flowpro",
+      "initial-version": "0.1.0",
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": false,
       "changelog-sections": [
