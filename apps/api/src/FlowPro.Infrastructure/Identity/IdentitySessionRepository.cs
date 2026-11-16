@@ -61,6 +61,15 @@ internal sealed class IdentitySessionRepository(FlowProDbContext dbContext)
             .OrderBy(permission => permission)
             .ToArrayAsync(cancellationToken);
 
+        // The teams this member leads, by name: the web app scopes a manager's approvals and
+        // team views to them.
+        string[] managedTeams = await dbContext.Teams
+            .AsNoTracking()
+            .Where(team => team.TenantId == tenantId && team.ManagerUserId == userId)
+            .Select(team => team.Name)
+            .OrderBy(name => name)
+            .ToArrayAsync(cancellationToken);
+
         return new CurrentSession(
             session.TenantId,
             session.TenantSlug,
@@ -70,6 +79,7 @@ internal sealed class IdentitySessionRepository(FlowProDbContext dbContext)
             session.Email,
             session.DisplayName,
             roles,
-            permissions);
+            permissions,
+            managedTeams);
     }
 }

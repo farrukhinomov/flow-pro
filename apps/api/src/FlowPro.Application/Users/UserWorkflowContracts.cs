@@ -56,4 +56,5 @@ public sealed record UserWorkflowRecord(
     string? DeactivationReason,
     DateTimeOffset? RetentionUntil,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    Guid? UserId = null);

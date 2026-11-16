@@ -22,6 +22,8 @@ export interface AuthUser {
   role: UserRole[]
   source?: 'local-dev' | 'session'
   team?: string
+  /** Every team this member leads, from the server session. `team` is the first of them. */
+  managedTeams?: string[]
   exp: number
 }
 
@@ -165,11 +167,13 @@ export function createLocalAuthUser({
 
 export function createSessionAuthUser({
   email,
+  managedTeams = [],
   name,
   roles,
   userId,
 }: {
   email: string
+  managedTeams?: string[]
   name: string
   roles: UserRole[]
   userId: string
@@ -178,9 +182,11 @@ export function createSessionAuthUser({
     accountNo: userId,
     email,
     exp: Date.now() + AUTH_TTL_MS,
+    managedTeams,
     name,
     role: roles,
     source: 'session',
+    team: managedTeams[0],
   }
 }
 

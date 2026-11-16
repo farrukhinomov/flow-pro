@@ -20,7 +20,8 @@ public sealed class IdentityQueryHandlerTests
             "person@example.com",
             "Example Person",
             ["employee"],
-            ["sync.read.self"]);
+            ["sync.read.self"],
+            ["Support"]);
         IdentityQueryHandler handler = new(
             new FakeCurrentRequestContext(TenantId, UserId),
             new FakeIdentitySessionRepository(expected));

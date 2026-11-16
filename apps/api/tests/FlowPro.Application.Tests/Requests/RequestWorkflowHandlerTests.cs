@@ -282,7 +282,8 @@ public sealed class RequestWorkflowHandlerTests
                     "founder@flowpro.local",
                     "Marta Lindgren",
                     ["superadmin"],
-                    PermissionKeys.All));
+                    PermissionKeys.All,
+                    []));
     }
 
     private sealed class FakeSyncCommandHandler : ICommandHandler<SubmitSyncBatchCommand, SyncBatchResponse>

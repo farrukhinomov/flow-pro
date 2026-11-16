@@ -1,9 +1,8 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 /**
- * Retakes the README screenshot from the seeded public demo, signed in as its
- * admin, so it only ever shows fictional people. Skipped unless
- * FLOWPRO_CAPTURE_SCREENSHOTS=true:
+ * Retakes the README screenshots from the seeded public demo, so they only ever
+ * show fictional people. Skipped unless FLOWPRO_CAPTURE_SCREENSHOTS=true:
  *
  *   FLOWPRO_CAPTURE_SCREENSHOTS=true npm run test:e2e:demo -- --grep "README screenshots"
  */
@@ -19,16 +18,31 @@ test.describe('README screenshots', () => {
     colorScheme: 'light',
   })
 
-  test('captures Today', async ({ page }) => {
-    await page.goto('/sign-in')
-    await page.getByRole('button', { name: /Sign in as Admin/ }).click()
-    await expect(page).not.toHaveURL(/\/sign-in/)
-
+  test('captures Today and the approval queue', async ({ page }) => {
+    await signInAs(page, 'Admin')
     await page.goto('/')
     await expect(page.getByRole('heading', { name: /^Today$/ })).toBeVisible()
-    // Lets the sync feed deliver the demo's records and the charts finish drawing.
-    await page.waitForLoadState('networkidle')
-    await page.waitForTimeout(1_500)
+    await settle(page)
     await page.screenshot({ path: `${directory}/today.png` })
+
+    await page.context().clearCookies()
+    await signInAs(page, 'Manager')
+    await page.goto('/requests')
+    await page.getByRole('tab', { name: 'Approvals' }).click()
+    await expect(page.getByText('Jamie Chen').first()).toBeVisible()
+    await settle(page)
+    await page.screenshot({ path: `${directory}/requests.png` })
   })
 })
+
+async function signInAs(page: Page, role: 'Admin' | 'Manager') {
+  await page.goto('/sign-in')
+  await page.getByRole('button', { name: new RegExp(`Sign in as ${role}`) }).click()
+  await expect(page).not.toHaveURL(/\/sign-in/)
+}
+
+// Lets the sync feed deliver the demo's records and the charts finish drawing.
+async function settle(page: Page) {
+  await page.waitForLoadState('networkidle')
+  await page.waitForTimeout(1_500)
+}
