@@ -10,14 +10,11 @@ Multi-tenant workforce operations for small and mid-sized German companies:
 time tracking, absence requests, monthly timesheets, team planning, payroll
 preparation and a privacy audit trail, in English and German.
 
-**Live demo:** [flowpro.inomov.online](https://flowpro.inomov.online) — register
-an account and the onboarding wizard provisions your own workspace.
+A public demo with one-click sign-in for each role is on its way. Until then,
+the [quick start](docs/self-hosting/quick-start.md) runs the whole stack
+locally with Docker.
 
 ![Today screen](docs/assets/screenshots/today.png)
-
-| Requests | Planning |
-| --- | --- |
-| ![Requests](docs/assets/screenshots/requests.png) | ![Planning](docs/assets/screenshots/planning.png) |
 
 ## What It Shows
 
@@ -29,7 +26,7 @@ an account and the onboarding wizard provisions your own workspace.
 | **Security** | Built-in accounts with server-side sessions in HttpOnly cookies (no tokens in the browser), optional two-step sign-in with any authenticator app and recovery codes, cross-site request protection, permission-based authorization policies, rate limiting and lockout, RFC 7807 problem details, NuGet vulnerability audit as a build gate. |
 | **Domain** | German public holidays per federal state, workspace time zones, attendance policies with effective dates and history, immutable timesheet snapshots. |
 | **Frontend** | React + TypeScript, TanStack Router/Query, shadcn/Radix UI, offline-capable IndexedDB cache and sync outbox, full EN/DE i18n, accessibility live regions. |
-| **Quality** | 174 backend tests, 315 frontend unit tests, Playwright e2e against the real API, a visual QA sweep across 3 viewports, and a first-paint performance budget — all in CI. |
+| **Quality** | Backend unit and architecture tests, database tests that prove tenant isolation against a real PostgreSQL, frontend unit tests, Playwright e2e against the real API (sign-in, invitations, two-step sign-in, the public demo), a visual QA sweep across 3 viewports, and a first-paint performance budget — all in CI. |
 
 ## Architecture
 
