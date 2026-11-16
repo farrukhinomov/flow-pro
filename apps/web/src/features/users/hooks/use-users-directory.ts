@@ -13,6 +13,8 @@ import type { SyncMeta } from '@/domain/attendance/types'
 import type { EmployeeUser, UserRole } from '@/domain/users/types'
 import { useI18n } from '@/i18n'
 import { toast } from 'sonner'
+import { logger } from '@/lib/logger'
+import { optionalSource } from '@/lib/optional-source'
 
 export function useUsersDirectory() {
   const { t } = useI18n()
@@ -24,27 +26,39 @@ export function useUsersDirectory() {
   const [isLoading, setIsLoading] = useState(true)
 
   const refresh = useCallback(async () => {
-    const [nextUsers, nextSyncMeta, organizationWorkspace] = await Promise.all([
-      applicationStore.listUsers({
-        onSnapshot: ({ data }) => setUsers(data),
-      }),
-      readCurrentSyncMeta(),
-      listOrganizationWorkspaceBackendFirst(),
-    ])
+    try {
+      const [nextUsers, nextSyncMeta, organizationWorkspace] =
+        await Promise.all([
+          applicationStore.listUsers({
+            onSnapshot: ({ data }) => setUsers(data),
+          }),
+          optionalSource(readCurrentSyncMeta(), null, 'sync status'),
+          // Delegations only annotate managers; a viewer who may not read the
+          // organization catalog still gets the directory.
+          optionalSource(
+            listOrganizationWorkspaceBackendFirst(),
+            { delegations: [], records: [] },
+            'organization catalog'
+          ),
+        ])
 
-    setUsers(nextUsers)
-    setSyncMeta(nextSyncMeta)
-    setDelegationsByManager(
-      organizationWorkspace.delegations.reduce<Record<string, string[]>>(
-        (acc, item) => {
-          if (!item.active) return acc
-          acc[item.managerId] = [...(acc[item.managerId] ?? []), item.team]
-          return acc
-        },
-        {}
+      setUsers(nextUsers)
+      setSyncMeta(nextSyncMeta)
+      setDelegationsByManager(
+        organizationWorkspace.delegations.reduce<Record<string, string[]>>(
+          (acc, item) => {
+            if (!item.active) return acc
+            acc[item.managerId] = [...(acc[item.managerId] ?? []), item.team]
+            return acc
+          },
+          {}
+        )
       )
-    )
-    setIsLoading(false)
+    } catch (error) {
+      logger.error(error, 'Could not load the people directory')
+    } finally {
+      setIsLoading(false)
+    }
   }, [])
 
   useEffect(() => {

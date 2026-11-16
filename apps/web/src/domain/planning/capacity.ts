@@ -165,8 +165,11 @@ export function calculateTeamCapacity({
 
       const onSite = available
       const warnings: string[] = []
+      // A day nobody in the team is scheduled to work, such as a weekend, is not a working day
+      // for the team, so its minimum staffing does not apply.
+      const isWorkingDay = scheduledPeople.length > 0
 
-      if (available + remote < rule.minimumStaff) {
+      if (isWorkingDay && available + remote < rule.minimumStaff) {
         warnings.push(
           tStatic('planningUi.belowMinimumStaffingSentence', {
             team,
@@ -176,7 +179,11 @@ export function calculateTeamCapacity({
         )
       }
 
-      if ((rule.minimumOnSite ?? 0) > 0 && onSite < (rule.minimumOnSite ?? 0)) {
+      if (
+        isWorkingDay &&
+        (rule.minimumOnSite ?? 0) > 0 &&
+        onSite < (rule.minimumOnSite ?? 0)
+      ) {
         warnings.push(
           tStatic('planningUi.requiredOnsiteStaffSentence', {
             team,
@@ -189,7 +196,7 @@ export function calculateTeamCapacity({
       const status =
         warnings.length > 0
           ? 'conflict'
-          : available + remote === rule.minimumStaff
+          : isWorkingDay && available + remote === rule.minimumStaff
             ? 'tight'
             : 'healthy'
 

@@ -165,6 +165,16 @@ test.describe('public demo', () => {
     await expect(page.getByText(/Unknown employee/)).toHaveCount(0)
   })
 
+  test('an employee who opens the People page sees only themselves', async ({
+    browser,
+  }) => {
+    const employee = await signedInAs(browser, 'Employee')
+    await employee.goto('/users')
+    await expect(employee.getByText('Jamie Chen').first()).toBeVisible()
+    await expect(employee.getByText('Priya Nair')).toHaveCount(0)
+    await employee.context().close()
+  })
+
   test('the manager approves a vacation and the employee sees it approved', async ({
     browser,
   }) => {

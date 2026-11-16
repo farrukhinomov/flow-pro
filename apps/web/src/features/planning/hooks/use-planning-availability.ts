@@ -16,6 +16,8 @@ import type {
 } from '@/domain/planning/types'
 import type { EmployeeRequest } from '@/domain/requests/types'
 import type { EmployeeUser } from '@/domain/users/types'
+import { logger } from '@/lib/logger'
+import { optionalSource } from '@/lib/optional-source'
 import { formatPeriodMonth } from '@/lib/periods'
 
 export type {
@@ -62,24 +64,30 @@ export function usePlanningAvailability(
   const [isLoading, setIsLoading] = useState(true)
 
   const refresh = useCallback(async () => {
-    const [planningPackage, nextSyncMeta] = await Promise.all([
-      applicationStore.getPlanningPackage({
-        onSnapshot: ({ data }) => {
-          setPeople(data.people)
-          setRequests(data.requests)
-          setUsers(data.people.map((person) => person.user))
-        },
-        periodMonth,
-        viewer,
-      }),
-      readCurrentSyncMeta(),
-    ])
+    try {
+      const [planningPackage, nextSyncMeta] = await Promise.all([
+        applicationStore.getPlanningPackage({
+          onSnapshot: ({ data }) => {
+            setPeople(data.people)
+            setRequests(data.requests)
+            setUsers(data.people.map((person) => person.user))
+          },
+          periodMonth,
+          viewer,
+        }),
+        optionalSource(readCurrentSyncMeta(), null, 'sync status'),
+      ])
 
-    setPeople(planningPackage.people)
-    setRequests(planningPackage.requests)
-    setUsers(planningPackage.people.map((person) => person.user))
-    setSyncMeta(nextSyncMeta)
-    setIsLoading(false)
+      setPeople(planningPackage.people)
+      setRequests(planningPackage.requests)
+      setUsers(planningPackage.people.map((person) => person.user))
+      setSyncMeta(nextSyncMeta)
+    } catch (error) {
+      // Keeps what the last successful load showed instead of an endless loading state.
+      logger.error(error, 'Could not load planning')
+    } finally {
+      setIsLoading(false)
+    }
   }, [periodMonth, viewer])
 
   useEffect(() => {
