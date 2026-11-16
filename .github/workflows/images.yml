@@ -6,7 +6,9 @@ name: Images
 # - Every commit on main is published as `sha-<commit>` and `edge`, and is
 #   then deployed to the demo.
 # - Every release is published as `<version>`, `<major>.<minor>` and `latest`.
-#   These are the tags self-hosters use.
+#   These are the tags self-hosters use. The release workflow starts this one
+#   on the release's tag: a release published with GITHUB_TOKEN would not
+#   trigger a `release` event here.
 on:
   push:
     branches:
@@ -17,8 +19,6 @@ on:
       - 'docs/**'
       - 'LICENSE'
       - '.github/ISSUE_TEMPLATE/**'
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -78,7 +78,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
           flavor: |
-            latest=${{ github.event_name == 'release' }}
+            latest=${{ startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Build and push
         id: push

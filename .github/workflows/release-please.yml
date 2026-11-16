@@ -8,6 +8,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # Starts the image build for a new release, see below.
+  actions: write
 
 concurrency:
   group: release-please
@@ -26,5 +28,16 @@ jobs:
       # is a fine-grained token (contents + pull requests: write) that avoids
       # that. Without it the release PR still opens, but needs a manual CI run.
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      # A release published with GITHUB_TOKEN starts no other workflow, so the
+      # images of a release are built by starting that workflow on its tag.
+      # workflow_dispatch is the one event GITHUB_TOKEN may trigger.
+      - name: Build the release images
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: gh workflow run images.yml --repo "${GITHUB_REPOSITORY}" --ref "${TAG}"
