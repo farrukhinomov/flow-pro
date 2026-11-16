@@ -34,8 +34,8 @@ internal static class UserWorkflowEndpoints
                                 ? new UserDirectoryFilter(search, status, role, team)
                                 : null),
                         cancellationToken))
-            // The handler decides: the whole directory with users.manage, the caller's own teams
-            // with requests.approve.
+            // The handler decides: the whole directory with users.manage, the caller and the
+            // teams they lead with requests.approve, otherwise the caller alone.
             .RequireAuthorization();
 
         group.MapPut(

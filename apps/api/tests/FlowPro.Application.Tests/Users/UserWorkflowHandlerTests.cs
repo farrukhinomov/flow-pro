@@ -65,15 +65,20 @@ public sealed class UserWorkflowHandlerTests
     }
 
     [Fact]
-    public async Task WithoutUsersManageOrRequestsApproveTheDirectoryIsForbidden()
+    public async Task WithoutUsersManageOrRequestsApproveAMemberSeesOnlyThemselves()
     {
         TestFixture fixture = new();
         fixture.PermissionChecker.DeniedPermissions.Add(PermissionKeys.UsersManage);
         fixture.PermissionChecker.DeniedPermissions.Add(PermissionKeys.RequestsApprove);
-        fixture.Repository.Projections.Add(CreateProjection("usr-anna-a", "Anna", "Alpha", "employee", "Support"));
+        UserDirectoryProjection self = CreateProjection("usr-jamie", "Jamie", "Chen", "employee", "Support", ActorUserId);
+        UserDirectoryProjection colleague = CreateProjection("usr-anna-a", "Anna", "Alpha", "employee", "Support");
+        // Leading a team grants nothing without requests.approve.
+        colleague.Team!.Update(null, "SUPPORT", "Support", "team-support", ActorUserId);
+        fixture.Repository.Projections.AddRange([self, colleague]);
 
-        await Assert.ThrowsAsync<FlowProForbiddenException>(
-            () => fixture.Handler.HandleAsync(new ListUsersQuery(), CancellationToken.None));
+        UserDirectoryPage result = await fixture.Handler.HandleAsync(new ListUsersQuery(), CancellationToken.None);
+
+        Assert.Equal(["usr-jamie"], result.Items.Select(user => user.Id));
     }
 
     [Fact]

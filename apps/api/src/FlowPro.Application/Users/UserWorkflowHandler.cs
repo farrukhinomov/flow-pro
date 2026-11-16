@@ -42,17 +42,15 @@ public sealed class UserWorkflowHandler(
             PermissionKeys.UsersManage,
             cancellationToken);
 
-        // A manager who approves requests sees the people of the teams they lead, so the approval
-        // queue can show whose request it is. The whole directory needs users.manage.
-        if (!managesUsers
-            && !await permissionChecker.HasPermissionAsync(
+        // The whole directory needs users.manage. A manager who approves requests also sees the
+        // people of the teams they lead, so the approval queue can show whose request it is.
+        // Everyone else sees only themselves, which their own timesheet and requests need.
+        bool approvesForTeams = !managesUsers
+            && await permissionChecker.HasPermissionAsync(
                 identity.TenantId,
                 identity.UserId,
                 PermissionKeys.RequestsApprove,
-                cancellationToken))
-        {
-            await RequireUsersManageAsync(identity, cancellationToken);
-        }
+                cancellationToken);
 
         IReadOnlyList<UserDirectoryProjection> projections = await repository.ListAsync(
             identity.TenantId,
@@ -60,7 +58,7 @@ public sealed class UserWorkflowHandler(
         UserWorkflowRecord[] users = projections
             .Where(projection => managesUsers
                 || projection.User.Id == identity.UserId
-                || projection.Team?.ManagerUserId == identity.UserId)
+                || (approvesForTeams && projection.Team?.ManagerUserId == identity.UserId))
             .Select(Map)
             .Where(user => MatchesFilter(user, query.Filter))
             .ToArray();

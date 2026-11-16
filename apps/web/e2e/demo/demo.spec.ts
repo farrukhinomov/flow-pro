@@ -146,6 +146,23 @@ test.describe('public demo', () => {
     await expect(queue.getByText('Sofia Rossi')).toHaveCount(0)
   })
 
+  test('an employee can plan an absence and sees their own timesheet', async ({
+    page,
+  }) => {
+    await page.goto('/sign-in')
+    await page.getByRole('button', { name: /Sign in as Employee/ }).click()
+    await expect(page).not.toHaveURL(/\/sign-in/)
+
+    await page.goto('/requests')
+    await page.getByRole('combobox', { name: 'Absence type' }).click()
+    await expect(page.getByRole('option', { name: /Vacation/ })).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    await page.goto('/timesheet')
+    await expect(page.getByText(/Jamie Chen/).first()).toBeVisible()
+    await expect(page.getByText(/Unknown employee/)).toHaveCount(0)
+  })
+
   test('the nightly reset wipes everything and seeds the demo again', async ({
     baseURL,
   }) => {
