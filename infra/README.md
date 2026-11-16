@@ -69,11 +69,41 @@ Password login and root login are disabled.
    sudo chmod 600 /opt/flowpro/.env
    ```
 
-8. Deploy a version:
+   For the [public demo](../docs/self-hosting/public-deployment.md#public-demo),
+   the whole file is:
 
    ```bash
-   ssh -i ~/.ssh/flowpro-deploy deploy@<public_ip> 1.0.0
+   FLOWPRO_DOMAIN=demo.example.com
+
+   FLOWPRO_POSTGRES_DB=flowpro
+   FLOWPRO_POSTGRES_USER=flowpro
+   FLOWPRO_POSTGRES_PASSWORD=<random>
+   FLOWPRO_POSTGRES_ADMIN_PASSWORD=<random>
+
+   FLOWPRO_DEMO_MODE=true
+   # Public: the sign-in page shows it. At least 12 characters.
+   FLOWPRO_DEMO_PASSWORD=try flowpro today
+   FLOWPRO_DEMO_RESET_AT_UTC=03:00
+   # Required with the demo: nobody may create accounts on a wiped database.
+   FLOWPRO_REGISTRATION_ENABLED=false
+   # Empty: the demo sends no email.
+   FLOWPRO_SMTP_HOST=
    ```
+
+   Generate each `<random>` with `openssl rand -hex 32`; hex needs no escaping
+   in a connection string. The PostgreSQL passwords are read once, when the
+   database is first created; changing them later needs `ALTER ROLE` as well.
+
+8. Deploy a released version (see the
+   [releases](https://github.com/farrukhinomov/flow-pro/releases)):
+
+   ```bash
+   ssh -i ~/.ssh/flowpro-deploy deploy@<public_ip> 0.1.0
+   ```
+
+   The first deploy creates the database, applies the migrations and, with
+   the demo on, seeds the demo workspace. Check it with
+   `curl -i https://<domain>/health/ready`.
 
 ## Continuous deployment from GitHub
 
