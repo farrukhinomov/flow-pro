@@ -3,11 +3,13 @@ import {
   request as playwrightRequest,
   test,
   type APIRequestContext,
+  type Browser,
+  type Page,
 } from '@playwright/test'
 
 /**
  * The public demo: shared one-click logins, locked sign-in settings, and the nightly reset. Run with
- * `npm run test:e2e:demo`, which schedules the reset a minute or two ahead.
+ * `npm run test:e2e:demo`, which schedules the reset two to three minutes ahead.
  */
 
 const password = process.env.FLOWPRO_E2E_DEMO_PASSWORD ?? ''
@@ -163,10 +165,80 @@ test.describe('public demo', () => {
     await expect(page.getByText(/Unknown employee/)).toHaveCount(0)
   })
 
+  test('the manager approves a vacation and the employee sees it approved', async ({
+    browser,
+  }) => {
+    const manager = await signedInAs(browser, 'Manager')
+    await manager.goto('/requests')
+    await manager.getByRole('tab', { name: 'Approvals' }).click()
+    const queue = manager.getByRole('tabpanel', { name: 'Approvals' })
+    const jamie = queue.getByRole('row').filter({ hasText: 'Jamie Chen' })
+    await jamie.getByRole('button', { name: 'Review' }).click()
+    await manager.getByRole('button', { name: 'Approve', exact: true }).click()
+    await expect(jamie).toHaveCount(0)
+    await manager.context().close()
+
+    const employee = await signedInAs(browser, 'Employee')
+    await employee.goto('/requests')
+    await employee.getByRole('tab', { name: 'Mine' }).click()
+    await expect(
+      employee
+        .getByRole('tabpanel', { name: 'Mine' })
+        .getByRole('row')
+        .filter({ hasText: 'Vacation' })
+        .getByText('Approved')
+    ).toBeVisible()
+    await employee.context().close()
+  })
+
+  test('an employee clocks in and out and the day shows on their timesheet', async ({
+    browser,
+  }) => {
+    const employee = await signedInAs(browser, 'Employee')
+    await employee.goto('/')
+    await employee.getByRole('button', { name: 'Clock in', exact: true }).click()
+    await expect(
+      employee.getByRole('button', { name: 'Clock out', exact: true })
+    ).toBeVisible()
+    await employee.getByRole('button', { name: 'Clock out', exact: true }).click()
+    await expect(employee.getByText('Finished', { exact: true })).toBeVisible()
+
+    // The ledger shows the day with its clock-in, and no longer as open.
+    await employee.goto('/timesheet')
+    const ledger = employee.getByText(/Today\s*Clock-in \d{2}:\d{2}/)
+    await expect(ledger).toBeVisible()
+    await expect(
+      employee.getByText(/Today\s*Clock-in \d{2}:\d{2}.*\bopen\b/)
+    ).toHaveCount(0)
+    await employee.context().close()
+  })
+
+  test('an employee’s request reaches their manager', async ({ browser }) => {
+    const employee = await signedInAs(browser, 'Employee')
+    await employee.goto('/requests')
+    await employee.getByRole('combobox', { name: 'Absence type' }).click()
+    await employee.getByRole('option', { name: /Home office/ }).click()
+    await employee.getByRole('button', { name: 'Submit request' }).click()
+    await expect(employee.getByText('Request submitted.')).toBeVisible()
+    await employee.context().close()
+
+    const manager = await signedInAs(browser, 'Manager')
+    await manager.goto('/requests')
+    await manager.getByRole('tab', { name: 'Approvals' }).click()
+    await expect(
+      manager
+        .getByRole('tabpanel', { name: 'Approvals' })
+        .getByRole('row')
+        .filter({ hasText: 'Jamie Chen' })
+        .filter({ hasText: 'Home office' })
+    ).toBeVisible()
+    await manager.context().close()
+  })
+
   test('the nightly reset wipes everything and seeds the demo again', async ({
     baseURL,
   }) => {
-    test.setTimeout(240_000)
+    test.setTimeout(300_000)
     const visitor = await playwrightRequest.newContext({ baseURL })
     try {
       const signedIn = await visitor.post('/api/v1/auth/sign-in', {
@@ -178,7 +250,7 @@ test.describe('public demo', () => {
       await expect
         .poll(
           async () => (await visitor.get('/api/v1/auth/session')).status(),
-          { intervals: [5_000], timeout: 200_000 }
+          { intervals: [5_000], timeout: 260_000 }
         )
         .toBe(401)
 
@@ -197,4 +269,22 @@ async function currentSession(context: APIRequestContext) {
   const response = await context.get('/api/v1/auth/session')
   expect(response.status(), await response.text()).toBe(200)
   return (await response.json()) as { email: string; tenantName: string }
+}
+
+/** Signs in with a demo login's one-click button, in a browser context of its own. */
+async function signedInAs(
+  browser: Browser,
+  role: 'Admin' | 'Manager' | 'Employee'
+): Promise<Page> {
+  const context = await browser.newContext({
+    baseURL: test.info().project.use.baseURL,
+    locale: 'en-US',
+  })
+  const page = await context.newPage()
+  await page.goto('/sign-in')
+  await page
+    .getByRole('button', { name: new RegExp(`Sign in as ${role}`) })
+    .click()
+  await expect(page).not.toHaveURL(/\/sign-in/)
+  return page
 }
