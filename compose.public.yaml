@@ -1,0 +1,91 @@
+# Public deployment overrides. Layer on top of compose.yaml:
+#
+#   docker compose -f compose.yaml -f compose.public.yaml --env-file .env up -d
+#
+# Every secret and hostname is required from the environment; nothing falls
+# back to a development default. Caddy obtains and renews TLS certificates for
+# FLOWPRO_DOMAIN automatically, so ports 80 and 443 must be reachable.
+services:
+  postgres:
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${FLOWPRO_POSTGRES_ADMIN_PASSWORD:?Set FLOWPRO_POSTGRES_ADMIN_PASSWORD}
+      FLOWPRO_POSTGRES_DB: ${FLOWPRO_POSTGRES_DB:?Set FLOWPRO_POSTGRES_DB}
+      FLOWPRO_POSTGRES_USER: ${FLOWPRO_POSTGRES_USER:?Set FLOWPRO_POSTGRES_USER}
+      FLOWPRO_POSTGRES_PASSWORD: ${FLOWPRO_POSTGRES_PASSWORD:?Set FLOWPRO_POSTGRES_PASSWORD}
+      FLOWPRO_POSTGRES_CREATEDB: "false"
+
+  # Applies pending database migrations and exits. The API and worker start
+  # only after it succeeds.
+  migrate:
+    image: ghcr.io/farrukhinomov/flow-pro-migrate:${FLOWPRO_VERSION:-dev}
+    build:
+      context: .
+      dockerfile: docker/migrate.Dockerfile
+    environment:
+      ConnectionStrings__FlowPro: Host=postgres;Port=5432;Database=${FLOWPRO_POSTGRES_DB};Username=${FLOWPRO_POSTGRES_USER};Password=${FLOWPRO_POSTGRES_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_ENVIRONMENT: Staging
+      Authentication__Mode: Session
+      Authentication__Session__RegistrationEnabled: ${FLOWPRO_REGISTRATION_ENABLED:-true}
+      Authentication__Email__AppBaseUrl: https://${FLOWPRO_DOMAIN:?Set FLOWPRO_DOMAIN}/
+      # Confirmation and password reset mail. Leave FLOWPRO_SMTP_HOST empty to
+      # turn mail off; people then cannot reset a forgotten password themselves.
+      Email__From: ${FLOWPRO_EMAIL_FROM:-}
+      Email__Smtp__Host: ${FLOWPRO_SMTP_HOST:-}
+      Email__Smtp__Port: ${FLOWPRO_SMTP_PORT:-587}
+      Email__Smtp__Username: ${FLOWPRO_SMTP_USERNAME:-}
+      Email__Smtp__Password: ${FLOWPRO_SMTP_PASSWORD:-}
+      Email__Smtp__Security: ${FLOWPRO_SMTP_SECURITY:-StartTls}
+      # Per-address budgets for sign-in, account emails and registration.
+      RateLimiting__SignInPerMinute: ${FLOWPRO_RATE_LIMIT_SIGN_IN_PER_MINUTE:-10}
+      RateLimiting__AccountEmailPer15Minutes: ${FLOWPRO_RATE_LIMIT_ACCOUNT_EMAIL_PER_15_MINUTES:-5}
+      RateLimiting__RegistrationsPerHour: ${FLOWPRO_RATE_LIMIT_REGISTRATIONS_PER_HOUR:-5}
+      Cors__AllowedOrigins__0: https://${FLOWPRO_DOMAIN:?Set FLOWPRO_DOMAIN}
+      Database__ApplyMigrationsOnStartup: "false"
+      Database__SeedDevelopmentData: "false"
+      # The public demo wipes the database every night. Never turn it on for an
+      # instance with real data; it refuses to wipe a database that holds other
+      # workspaces. Needs FLOWPRO_REGISTRATION_ENABLED=false.
+      Demo__Enabled: ${FLOWPRO_DEMO_MODE:-false}
+      Demo__Password: ${FLOWPRO_DEMO_PASSWORD:-}
+      Demo__ResetAtUtc: ${FLOWPRO_DEMO_RESET_AT_UTC:-03:00}
+
+  # The local mail catcher has no place on a public server.
+  mailpit:
+    profiles: ["local-only"]
+
+  worker:
+    restart: unless-stopped
+    environment:
+      DOTNET_ENVIRONMENT: Staging
+      # The worker seeds and resets the demo, and checks its settings like the API.
+      Authentication__Session__RegistrationEnabled: ${FLOWPRO_REGISTRATION_ENABLED:-true}
+      # The public demo wipes the database every night. Never turn it on for an
+      # instance with real data; it refuses to wipe a database that holds other
+      # workspaces. Needs FLOWPRO_REGISTRATION_ENABLED=false.
+      Demo__Enabled: ${FLOWPRO_DEMO_MODE:-false}
+      Demo__Password: ${FLOWPRO_DEMO_PASSWORD:-}
+      Demo__ResetAtUtc: ${FLOWPRO_DEMO_RESET_AT_UTC:-03:00}
+
+  web:
+    restart: unless-stopped
+    environment:
+      FLOWPRO_AUTH_MODE: session
+      FLOWPRO_REGISTRATION_ENABLED: ${FLOWPRO_REGISTRATION_ENABLED:-true}
+      FLOWPRO_DEMO_MODE: ${FLOWPRO_DEMO_MODE:-false}
+      FLOWPRO_SITE_ADDRESS: ${FLOWPRO_DOMAIN:?Set FLOWPRO_DOMAIN}
+    ports: !override
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"

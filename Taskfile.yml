@@ -1,0 +1,102 @@
+# Task runner for the whole repository: https://taskfile.dev
+# Run `task` to list the available tasks.
+version: "3"
+
+tasks:
+  default:
+    desc: List the available tasks
+    silent: true
+    cmds:
+      - task --list
+
+  setup:
+    desc: Install dependencies for the web app and the API
+    cmds:
+      - task: web:setup
+      - task: api:setup
+
+  up:
+    desc: Build and start the whole stack on http://localhost:8088
+    cmds:
+      - docker compose up --build --detach
+
+  down:
+    desc: Stop the stack (data volumes are kept)
+    cmds:
+      - docker compose down
+
+  db:
+    desc: Start only PostgreSQL, for running the API and web app from source
+    cmds:
+      - docker compose up --detach postgres
+
+  dev:api:
+    desc: Run the API from source on http://localhost:5123
+    deps: [db]
+    dir: apps/api
+    cmds:
+      - dotnet run --project src/FlowPro.Api
+
+  dev:web:
+    desc: Run the web app from source on http://localhost:5173
+    dir: apps/web
+    cmds:
+      - npm run dev
+
+  check:
+    desc: Run every check that CI runs, except the browser end-to-end tests
+    cmds:
+      - task: web:check
+      - task: api:check
+
+  test:
+    desc: Run the unit tests of both apps
+    cmds:
+      - task: web:test
+      - task: api:test
+
+  e2e:
+    desc: Run the Playwright end-to-end tests against a real API
+    dir: apps/web
+    cmds:
+      - npm run test:e2e
+
+  web:setup:
+    dir: apps/web
+    cmds:
+      - npm ci
+
+  web:check:
+    desc: Format check, lint, typecheck, unit tests, build and licence check for the web app
+    dir: apps/web
+    cmds:
+      - npm run format:check
+      - npm run check
+      - npm run licenses
+
+  web:test:
+    dir: apps/web
+    cmds:
+      - npm test
+
+  api:setup:
+    dir: apps/api
+    cmds:
+      - dotnet tool restore
+      - dotnet restore FlowPro.slnx
+
+  api:check:
+    desc: Format check, build, tests, vulnerability audit, migration drift and licence check for the API
+    dir: apps/api
+    cmds:
+      - bash scripts/check.sh
+
+  api:test:
+    dir: apps/api
+    cmds:
+      - dotnet test FlowPro.slnx
+
+  backup:
+    desc: Back up the database and attachments of the running stack
+    cmds:
+      - bash scripts/backup.sh

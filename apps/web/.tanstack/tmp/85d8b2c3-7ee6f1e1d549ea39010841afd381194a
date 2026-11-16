@@ -1,0 +1,324 @@
+import { useState } from 'react'
+import { format, parseISO, isBefore } from 'date-fns'
+import { createFileRoute } from '@tanstack/react-router'
+import { Settings2, FileSpreadsheet, Search, UserX } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+// import { Separator } from '@/components/ui/separator'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { Header } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { ProfileDropdown } from '@/components/profile-dropdown'
+import { ThemeSwitch } from '@/components/theme-switch'
+
+export const Route = createFileRoute('/_authenticated/team-availability/')({
+  component: TeamAvailabilityPage,
+})
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type AbsenceEntry = {
+  date: string // ISO - absence start/next date
+  code: string
+  label: string
+}
+
+type Employee = {
+  id: string
+  name: string
+  status: 'absent'
+  absentUntil?: string // ISO date, empty = ongoing/unknown
+  absences?: AbsenceEntry[]
+}
+
+// ─── Data (parsed from HTML) ─────────────────────────────────────────────────
+
+const EMPLOYEES: Employee[] = [
+  {
+    id: '1',
+    name: 'Stolz, Rebekka',
+    status: 'absent',
+    absentUntil: '2026-06-01',
+  },
+  { id: '2', name: 'Müller, Michael', status: 'absent' },
+  {
+    id: '3',
+    name: 'Marx, Andreas',
+    status: 'absent',
+    absentUntil: '2026-05-31',
+  },
+  { id: '4', name: 'Klein, Dirk', status: 'absent' },
+]
+
+const TODAY = new Date()
+
+function getUntilLabel(until?: string): { label: string; urgent: boolean } {
+  if (!until) return { label: '—', urgent: false }
+  try {
+    const d = parseISO(until)
+    const urgent = isBefore(
+      d,
+      new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate() + 3)
+    )
+    return {
+      label: format(d, 'dd/MM/yyyy'),
+      urgent,
+    }
+  } catch {
+    return { label: until, urgent: false }
+  }
+}
+
+function TeamAvailabilityPage() {
+  const [search, setSearch] = useState('')
+
+  const filtered = EMPLOYEES.filter((e) =>
+    e.name.toLowerCase().includes(search.toLowerCase())
+  )
+
+  //   const withDate = filtered.filter(e => e.absentUntil).length
+  //   const withoutDate = filtered.filter(e => !e.absentUntil).length
+
+  return (
+    <>
+      <Header>
+        <div className='ms-auto flex items-center space-x-4'>
+          <ThemeSwitch />
+          <ProfileDropdown />
+        </div>
+      </Header>
+
+      <Main>
+        {/* ── Page heading ── */}
+        <div className='mb-6 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between'>
+          <div>
+            <h1 className='text-2xl font-semibold tracking-tight'>
+              Team Availability
+            </h1>
+            <p className='mt-0.5 text-sm text-muted-foreground'>
+              Real-time absence overview for{' '}
+              {format(TODAY, 'EEEE, dd MMMM yyyy')}
+            </p>
+          </div>
+          <div className='flex gap-2'>
+            <Button variant='ghost' size='icon' className='h-8 w-8'>
+              <Settings2 className='h-4 w-4' />
+            </Button>
+            <Button variant='ghost' size='icon' className='h-8 w-8'>
+              <FileSpreadsheet className='h-4 w-4' />
+            </Button>
+          </div>
+        </div>
+
+        {/* ── Stats ── */}
+        <div className='mb-6 grid gap-4 sm:grid-cols-3'>
+          <Card>
+            <CardHeader className='pb-2'>
+              <CardDescription>Currently absent</CardDescription>
+              <CardTitle className='text-3xl font-bold text-rose-500'>
+                {EMPLOYEES.length}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className='text-xs text-muted-foreground'>
+                employees out of office
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className='pb-2'>
+              <CardDescription>Return date known</CardDescription>
+              <CardTitle className='text-3xl font-bold'>
+                {EMPLOYEES.filter((e) => e.absentUntil).length}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className='text-xs text-muted-foreground'>
+                with an end date on record
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className='pb-2'>
+              <CardDescription>Return date unknown</CardDescription>
+              <CardTitle className='text-3xl font-bold text-muted-foreground'>
+                {EMPLOYEES.filter((e) => !e.absentUntil).length}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className='text-xs text-muted-foreground'>
+                no end date specified
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ── Table ── */}
+        <Card>
+          <CardHeader className='pb-3'>
+            <div className='flex flex-wrap items-center justify-between gap-4'>
+              <div>
+                <CardTitle className='text-sm font-medium'>
+                  Absent employees
+                </CardTitle>
+                <CardDescription className='mt-0.5'>
+                  {filtered.length} employee{filtered.length !== 1 ? 's' : ''}{' '}
+                  shown
+                </CardDescription>
+              </div>
+              <div className='relative w-60'>
+                <Search className='absolute top-2 left-2.5 h-4 w-4 text-muted-foreground' />
+                <Input
+                  placeholder='Search by name…'
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className='h-8 pl-8 text-sm'
+                />
+              </div>
+            </div>
+          </CardHeader>
+          <div className='overflow-x-auto'>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className='w-10'>#</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead className='text-right'>Absent until</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={4}
+                      className='py-12 text-center text-sm text-muted-foreground'
+                    >
+                      No employees found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((emp, i) => {
+                    const { label, urgent } = getUntilLabel(emp.absentUntil)
+                    const hasAbsences = !!emp.absences?.length
+                    return (
+                      <TableRow
+                        key={emp.id}
+                        className={cn(
+                          i % 2 === 1 && 'bg-muted/20',
+                          'transition-colors hover:bg-muted/40'
+                        )}
+                      >
+                        <TableCell className='font-mono text-xs text-muted-foreground'>
+                          {i + 1}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant='outline'
+                            className='border-rose-200 bg-rose-500/10 text-xs text-rose-600 dark:border-rose-800'
+                          >
+                            <UserX className='mr-1 h-3 w-3' />
+                            absent
+                          </Badge>
+                        </TableCell>
+                        <TableCell className='text-sm font-medium'>
+                          {hasAbsences ? (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className='cursor-help underline decoration-dotted underline-offset-2'>
+                                    {emp.name}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                  side='right'
+                                  className='max-w-xs space-y-2 p-3'
+                                >
+                                  <p className='mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase'>
+                                    Absences
+                                  </p>
+                                  {emp.absences!.map((a, ai) => (
+                                    <div
+                                      key={ai}
+                                      className='flex items-center gap-2 text-xs'
+                                    >
+                                      <span className='w-20 shrink-0 text-muted-foreground'>
+                                        {format(parseISO(a.date), 'dd/MM/yyyy')}
+                                      </span>
+                                      {a.code ? (
+                                        <span
+                                          className='rounded px-1.5 py-0.5 text-[10px] font-bold'
+                                          style={{
+                                            background: '#ff0080',
+                                            color: 'white',
+                                          }}
+                                        >
+                                          {a.code}
+                                        </span>
+                                      ) : (
+                                        <span className='rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground'>
+                                          anon
+                                        </span>
+                                      )}
+                                      <span>{a.label}</span>
+                                    </div>
+                                  ))}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : (
+                            emp.name
+                          )}
+                        </TableCell>
+                        <TableCell className='text-right'>
+                          {emp.absentUntil ? (
+                            <span
+                              className={cn(
+                                'font-mono text-sm tabular-nums',
+                                urgent
+                                  ? 'font-semibold text-amber-500'
+                                  : 'text-muted-foreground'
+                              )}
+                            >
+                              {label}
+                            </span>
+                          ) : (
+                            <span className='text-sm text-muted-foreground/50'>
+                              —
+                            </span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
+      </Main>
+    </>
+  )
+}

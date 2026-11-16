@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FlowPro.Api/FlowPro.Api.csproj" />
+    <Project Path="src/FlowPro.Application/FlowPro.Application.csproj" />
+    <Project Path="src/FlowPro.Domain/FlowPro.Domain.csproj" />
+    <Project Path="src/FlowPro.Infrastructure/FlowPro.Infrastructure.csproj" />
+    <Project Path="src/FlowPro.Worker/FlowPro.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FlowPro.Application.Tests/FlowPro.Application.Tests.csproj" />
+    <Project Path="tests/FlowPro.Architecture.Tests/FlowPro.Architecture.Tests.csproj" />
+    <Project Path="tests/FlowPro.Domain.Tests/FlowPro.Domain.Tests.csproj" />
+    <Project Path="tests/FlowPro.Infrastructure.Tests/FlowPro.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>

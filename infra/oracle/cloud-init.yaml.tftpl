@@ -1,0 +1,92 @@
+#cloud-config
+# First-boot setup of the FlowPro server: container runtime, a locked-down
+# deploy account, the deploy and backup scripts, and a nightly backup timer.
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - iptables-persistent
+  - pipx
+  - unattended-upgrades
+
+users:
+  - default
+  - name: deploy
+    gecos: FlowPro deploy pipeline
+    shell: /bin/bash
+    lock_passwd: true
+    # This key can only run the deploy script, with the image tag as input.
+    ssh_authorized_keys:
+      - command="/usr/local/bin/flowpro-deploy",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding ${deploy_ssh_public_key}
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/60-flowpro.conf
+    permissions: "0644"
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+  - path: /usr/local/bin/flowpro-deploy
+    permissions: "0755"
+    encoding: b64
+    content: ${base64encode(deploy_script)}
+  - path: /usr/local/bin/flowpro-backup
+    permissions: "0755"
+    encoding: b64
+    content: ${base64encode(backup_script)}
+  - path: /etc/flowpro/backup.env
+    permissions: "0644"
+    content: |
+      FLOWPRO_BACKUP_BUCKET=${backup_bucket}
+      FLOWPRO_BACKUP_NAMESPACE=${backup_namespace}
+  - path: /etc/systemd/system/flowpro-backup.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=FlowPro database backup
+      After=docker.service
+      Requires=docker.service
+
+      [Service]
+      Type=oneshot
+      User=deploy
+      EnvironmentFile=/etc/flowpro/backup.env
+      ExecStart=/usr/local/bin/flowpro-backup
+  - path: /etc/systemd/system/flowpro-backup.timer
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Nightly FlowPro database backup
+
+      [Timer]
+      OnCalendar=*-*-* 02:30:00 UTC
+      RandomizedDelaySec=15m
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+
+runcmd:
+  # Docker Engine and the Compose plugin from Docker's own repository.
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
+  - apt-get update
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - usermod -aG docker deploy
+  # Oracle's Ubuntu images block everything but SSH in the host firewall.
+  - iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
+  - iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
+  - iptables -I INPUT 6 -m state --state NEW -p udp --dport 443 -j ACCEPT
+  - netfilter-persistent save
+  # Oracle Cloud CLI, used by the backup script to upload to Object Storage.
+  - PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install oci-cli
+  # The application directory holds the compose files and the .env file.
+  - install -d -o deploy -g deploy -m 0750 /opt/flowpro
+  - sudo -u deploy git clone ${repository_url} /opt/flowpro
+  - systemctl restart ssh
+  - systemctl daemon-reload
+  - systemctl enable --now flowpro-backup.timer

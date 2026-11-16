@@ -1,0 +1,82 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "backend: restore",
+      "command": "dotnet",
+      "args": ["restore", "FlowPro.slnx"],
+      "type": "process",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "backend: build",
+      "command": "dotnet",
+      "args": ["build", "FlowPro.slnx"],
+      "type": "process",
+      "dependsOn": "backend: restore",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "backend: test",
+      "command": "dotnet",
+      "args": ["test", "FlowPro.slnx"],
+      "type": "process",
+      "dependsOn": "backend: build",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "backend: postgres up",
+      "command": "docker",
+      "args": ["compose", "up", "-d", "postgres"],
+      "type": "process",
+      "problemMatcher": []
+    },
+    {
+      "label": "backend: tools up",
+      "command": "docker",
+      "args": ["compose", "--profile", "tools", "up", "-d", "postgres", "pgadmin"],
+      "type": "process",
+      "problemMatcher": []
+    },
+    {
+      "label": "backend: postgres down",
+      "command": "docker",
+      "args": ["compose", "down"],
+      "type": "process",
+      "problemMatcher": []
+    },
+    {
+      "label": "backend: api",
+      "command": "dotnet",
+      "args": ["run", "--project", "src/FlowPro.Api/FlowPro.Api.csproj"],
+      "type": "process",
+      "dependsOn": "backend: postgres up",
+      "isBackground": true,
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "backend: worker",
+      "command": "dotnet",
+      "args": ["run", "--project", "src/FlowPro.Worker/FlowPro.Worker.csproj"],
+      "type": "process",
+      "dependsOn": "backend: postgres up",
+      "isBackground": true,
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "backend: verify",
+      "command": "bash",
+      "args": ["scripts/check.sh"],
+      "type": "process",
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}

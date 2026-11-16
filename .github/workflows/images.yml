@@ -1,0 +1,147 @@
+name: Images
+
+# Builds the four container images (api, worker, web, migrate) for amd64 and
+# arm64 and publishes them to GitHub Container Registry.
+#
+# - Every commit on main is published as `sha-<commit>` and `edge`, and is
+#   then deployed to the demo.
+# - Every release is published as `<version>`, `<major>.<minor>` and `latest`.
+#   These are the tags self-hosters use.
+on:
+  push:
+    branches:
+      - main
+    # A documentation-only merge changes no image, so it is not rebuilt.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.image }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, worker, web, migrate]
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}-${{ matrix.image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Only the small final stages run emulated; the .NET and Node build
+      # stages cross-compile on the runner's own architecture.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags and labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,format=long,prefix=sha-
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          flavor: |
+            latest=${{ github.event_name == 'release' }}
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/${{ matrix.image }}.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+      # Signed statement of which commit and workflow produced the image.
+      # Verify with: gh attestation verify oci://<image> --repo <owner>/<repo>
+      # Attestations are only available to public repositories on personal accounts.
+      - name: Attest build provenance
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  deploy-demo:
+    name: Deploy demo
+    # Off until the demo server exists: set the repository variable
+    # DEMO_DEPLOY_ENABLED to "true" to turn it on.
+    if: github.event_name == 'push' && vars.DEMO_DEPLOY_ENABLED == 'true'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # The demo environment holds the deploy key and can require approval.
+    environment:
+      name: demo
+      url: https://${{ vars.DEMO_DOMAIN }}
+    concurrency:
+      group: deploy-demo
+      cancel-in-progress: false
+    steps:
+      # The key is bound on the server to one forced command, the deploy
+      # script. The only input it accepts is the image tag to deploy.
+      - name: Deploy over SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.DEMO_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEMO_SSH_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEMO_SSH_HOST }}
+          VERSION: sha-${{ github.sha }}
+        run: |
+          install -m 700 -d ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=yes \
+            -o IdentitiesOnly=yes \
+            "deploy@${DEPLOY_HOST}" "$VERSION"
+
+      - name: Check the demo is healthy
+        env:
+          DEMO_DOMAIN: ${{ vars.DEMO_DOMAIN }}
+        run: >
+          curl --fail --silent --show-error --max-time 20
+          --retry 10 --retry-delay 6 --retry-all-errors
+          "https://${DEMO_DOMAIN}/health/ready"

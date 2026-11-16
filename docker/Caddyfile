@@ -1,0 +1,48 @@
+# Edge server for FlowPro: serves the built web app and proxies the API.
+#
+# FLOWPRO_SITE_ADDRESS is ":80" for plain HTTP on a local machine, or a domain
+# name such as "flowpro.example.com", in which case Caddy obtains and renews a
+# TLS certificate for it automatically.
+{$FLOWPRO_SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=(self), interest-cohort=()"
+		-Server
+	}
+
+	@api path /api/* /openapi/* /scalar /scalar/* /health/*
+	handle @api {
+		reverse_proxy {$FLOWPRO_API_UPSTREAM:api:8080}
+	}
+
+	# Runtime configuration for the web app, taken from this container's
+	# environment. Unset values are empty and the app falls back to its defaults.
+	handle /config.js {
+		header Content-Type "application/javascript; charset=utf-8"
+		header Cache-Control "no-store"
+		respond <<JS
+			window.__FLOWPRO_CONFIG__ = {
+			  "VITE_FLOWPRO_AUTH_MODE": "{$FLOWPRO_AUTH_MODE}",
+			  "VITE_FLOWPRO_REGISTRATION_ENABLED": "{$FLOWPRO_REGISTRATION_ENABLED}",
+			  "VITE_FLOWPRO_DEMO_MODE": "{$FLOWPRO_DEMO_MODE}"
+			};
+			JS 200
+	}
+
+	handle /assets/* {
+		root * /srv
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	handle {
+		root * /srv
+		header Cache-Control "no-store"
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -1,0 +1,40 @@
+name: PR title
+
+# Squash merges use the PR title as the commit message, and release-please
+# builds the changelog from those commits. This keeps the titles parseable.
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  pr-title:
+    name: PR title
+    # Dependabot writes its own titles. They keep the chore(deps) prefix that
+    # release-please needs, but capitalise the subject.
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      # Reads only the PR title through the API. It never checks out PR code,
+      # which keeps pull_request_target safe for pull requests from forks.
+      - uses: amannn/action-semantic-pull-request@2252a14e810aa9b85c2d560bd7070c802206ecf6 # v6.1.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            Start the subject "{subject}" with a lowercase letter.

@@ -1,0 +1,38 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "FlowPro API",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "backend: build",
+      "program": "${workspaceFolder}/src/FlowPro.Api/bin/Debug/net10.0/FlowPro.Api.dll",
+      "cwd": "${workspaceFolder}/src/FlowPro.Api",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      }
+    },
+    {
+      "name": "FlowPro Worker",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "backend: build",
+      "program": "${workspaceFolder}/src/FlowPro.Worker/bin/Debug/net10.0/FlowPro.Worker.dll",
+      "cwd": "${workspaceFolder}/src/FlowPro.Worker",
+      "env": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "FlowPro API + Worker",
+      "configurations": ["FlowPro API", "FlowPro Worker"],
+      "stopAll": true
+    }
+  ]
+}

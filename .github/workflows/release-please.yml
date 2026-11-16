@@ -1,0 +1,30 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Release PR
+    runs-on: ubuntu-latest
+    steps:
+      # Opens or updates one release PR. The owner reviews and merges it by
+      # hand; merging tags vX.Y.Z and publishes the GitHub release.
+      #
+      # PRs opened with GITHUB_TOKEN do not trigger other workflows, so the
+      # required checks would never run on the release PR. RELEASE_PLEASE_TOKEN
+      # is a fine-grained token (contents + pull requests: write) that avoids
+      # that. Without it the release PR still opens, but needs a manual CI run.
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}

@@ -1,0 +1,446 @@
+name: FlowPro CI
+
+# Every change runs CI, documentation included: branch protection requires
+# these checks, and a check that never reports would block the pull request.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Runners are pinned rather than ubuntu-latest: once ubuntu-latest moved to
+# 26.04, Playwright 1.60 refused to install Chromium on it. Move to the next
+# image together with a Playwright upgrade that supports it.
+jobs:
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history: a secret removed in a later commit is still leaked.
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The gitleaks binary is MIT-licensed and runs from its published image,
+      # pinned by digest. Known false positives live in .gitleaksignore.
+      - name: Scan history for secrets
+        run: >
+          docker run --rm --volume "$PWD:/repo:ro"
+          ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+          git /repo --redact --no-banner
+
+  infrastructure:
+    name: Infrastructure check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate compose files
+        env:
+          FLOWPRO_POSTGRES_DB: flowpro
+          FLOWPRO_POSTGRES_USER: flowpro
+          FLOWPRO_POSTGRES_PASSWORD: example
+          FLOWPRO_POSTGRES_ADMIN_PASSWORD: example-admin
+          FLOWPRO_DOMAIN: flowpro.example.com
+        run: |
+          docker compose config --quiet
+          docker compose -f compose.yaml -f compose.public.yaml config --quiet
+
+      - name: Check shell scripts
+        run: shellcheck --severity=warning scripts/*.sh infra/deploy/*.sh docker/postgres/initdb/*.sh apps/api/scripts/*.sh apps/web/scripts/*.sh
+
+      - name: Validate OpenTofu configuration
+        working-directory: infra/oracle
+        run: |
+          tofu() { docker run --rm --volume "$PWD/..:/infra" --workdir /infra/oracle ghcr.io/opentofu/opentofu:1.13.9 "$@"; }
+          tofu fmt -check -diff
+          tofu init -backend=false -input=false
+          tofu validate
+
+  frontend:
+    name: Frontend check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Verify Node.js runtime
+        run: node scripts/check-node-version.mjs
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify formatting
+        run: npm run format:check
+
+      - name: Run frontend quality gate
+        run: npm run check
+
+      - name: Check dependency licences
+        run: npm run licenses
+
+  backend:
+    name: Backend check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: apps/api/global.json
+
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Restore packages
+        run: dotnet restore FlowPro.slnx
+
+      - name: Verify formatting
+        run: dotnet format FlowPro.slnx --verify-no-changes --no-restore
+
+      - name: Build
+        run: dotnet build FlowPro.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test FlowPro.slnx --configuration Release --no-build
+
+      - name: Check vulnerable packages
+        run: dotnet list FlowPro.slnx package --vulnerable --include-transitive
+
+      - name: Check dependency licences
+        run: >
+          dotnet tool run nuget-license
+          --input FlowPro.slnx
+          --include-transitive
+          --allowed-license-types allowed-licenses.json
+          --licenseurl-to-license-mappings license-url-mappings.json
+          --error-only
+
+      - name: Check migration drift
+        run: >
+          dotnet tool run dotnet-ef migrations has-pending-model-changes
+          --project src/FlowPro.Infrastructure/FlowPro.Infrastructure.csproj
+          --startup-project src/FlowPro.Api/FlowPro.Api.csproj
+          --configuration Release
+          --no-build
+
+  integrated-e2e:
+    name: Integrated browser e2e
+    # The browser suites run on pull requests only: a merge to main has already
+    # passed them, and running them again doubles the Actions minutes per change.
+    if: github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs:
+      - frontend
+      - backend
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Verify Node.js runtime
+        run: node scripts/check-node-version.mjs
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: apps/api/global.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Restore backend
+        working-directory: apps/api
+        run: dotnet restore FlowPro.slnx
+
+      - name: Build backend
+        working-directory: apps/api
+        run: dotnet build FlowPro.slnx --configuration Release --no-restore
+
+      - name: Run integrated e2e
+        run: npm run test:e2e
+
+      - name: Upload e2e failure evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-test-results
+          path: apps/web/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  visual-e2e:
+    # Runs on its own runner so the screenshot sweep cannot starve the browser
+    # used by the functional suite. It still gates the build.
+    name: Visual QA e2e
+    # Pull requests only, like integrated-e2e.
+    if: github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs:
+      - frontend
+      - backend
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Verify Node.js runtime
+        run: node scripts/check-node-version.mjs
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: apps/api/global.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Restore backend
+        working-directory: apps/api
+        run: dotnet restore FlowPro.slnx
+
+      - name: Build backend
+        working-directory: apps/api
+        run: dotnet build FlowPro.slnx --configuration Release --no-restore
+
+      - name: Run visual QA e2e
+        run: npm run test:e2e:visual
+
+      - name: Upload visual QA screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: visual-qa-screenshots
+          path: apps/web/test-results/visual-qa/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  session-e2e:
+    # The real sign-in path: an API in Session mode, the HttpOnly session cookie,
+    # and email links caught by Mailpit. Kept apart from the integrated suite,
+    # which signs in with development headers against a differently configured API.
+    name: Session browser e2e
+    # Pull requests only, like integrated-e2e.
+    if: github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs:
+      - frontend
+      - backend
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Verify Node.js runtime
+        run: node scripts/check-node-version.mjs
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: apps/api/global.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Restore backend
+        working-directory: apps/api
+        run: dotnet restore FlowPro.slnx
+
+      - name: Build backend
+        working-directory: apps/api
+        run: dotnet build FlowPro.slnx --configuration Release --no-restore
+
+      - name: Run session e2e
+        run: npm run test:e2e:session
+        env:
+          # The script writes the API log here, so a failure uploads it below.
+          TMPDIR: ${{ runner.temp }}
+
+      - name: Upload e2e failure evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: session-e2e-test-results
+          path: |
+            apps/web/test-results/
+            ${{ runner.temp }}/flowpro-api-session-e2e-*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  demo-e2e:
+    # The public demo: shared logins, the refusal to wipe a database that holds
+    # other workspaces, and a real nightly reset, against databases of its own.
+    name: Demo browser e2e
+    # Pull requests only, like integrated-e2e.
+    if: github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs:
+      - frontend
+      - backend
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Verify Node.js runtime
+        run: node scripts/check-node-version.mjs
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: apps/api/global.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Restore backend
+        working-directory: apps/api
+        run: dotnet restore FlowPro.slnx
+
+      - name: Build backend
+        working-directory: apps/api
+        run: dotnet build FlowPro.slnx --configuration Release --no-restore
+
+      - name: Run demo e2e
+        run: npm run test:e2e:demo
+        env:
+          # The script writes the API and worker logs here, so a failure uploads them below.
+          TMPDIR: ${{ runner.temp }}
+
+      - name: Upload e2e failure evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: demo-e2e-test-results
+          path: |
+            apps/web/test-results/
+            ${{ runner.temp }}/flowpro-demo-e2e-*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  public-runtime-smoke:
+    name: Public runtime smoke
+    # Probes the live demo, so it never runs for pull requests: forks have no
+    # access to the smoke secrets, and a PR should not fail because the demo
+    # host is down. It also waits until a demo domain is configured.
+    if: github.event_name != 'pull_request' && vars.DEMO_DOMAIN != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs:
+      - frontend
+      - backend
+    defaults:
+      run:
+        working-directory: apps/web
+    env:
+      FLOWPRO_SMOKE_ORIGIN: https://${{ vars.DEMO_DOMAIN }}
+      FLOWPRO_SMOKE_USERNAME: ${{ secrets.FLOWPRO_SMOKE_USERNAME }}
+      FLOWPRO_SMOKE_PASSWORD: ${{ secrets.FLOWPRO_SMOKE_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Verify Node.js runtime
+        run: node scripts/check-node-version.mjs
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run public runtime smoke
+        run: |
+          if [ -z "$FLOWPRO_SMOKE_USERNAME" ] || [ -z "$FLOWPRO_SMOKE_PASSWORD" ]; then
+            echo "::notice::Smoke credentials are not configured; skipping the public runtime smoke."
+            exit 0
+          fi
+          npm run test:public-runtime

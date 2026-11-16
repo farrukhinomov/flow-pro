@@ -1,0 +1,149 @@
+# FlowPro on one machine: `docker compose up --build` from the repository root.
+#
+# The defaults are for local development and evaluation: seeded demo data,
+# seeded accounts, and default passwords from .env.example. Do not expose this
+# configuration to the internet. Layer compose.public.yaml on top for a public
+# deployment.
+#
+#   docker compose up --build              whole stack, app on http://localhost:8088
+#   docker compose up -d postgres mailpit  database and mail catcher, run the API from an IDE
+#   docker compose --profile tools up -d   also start pgAdmin on :5050
+#
+# Mail the app sends (email confirmation, password reset) is caught by Mailpit
+# and shown at http://localhost:8025; nothing leaves the machine.
+#
+# Sign in as founder@flowpro.local (superadmin) or hannah.fischer@flowpro.test
+# (employee) with FLOWPRO_DEV_ACCOUNT_PASSWORD, "superadmin" by default.
+name: flowpro
+
+x-connection-string: &connection-string
+  ConnectionStrings__FlowPro: Host=postgres;Port=5432;Database=${FLOWPRO_POSTGRES_DB:-flowpro};Username=${FLOWPRO_POSTGRES_USER:-flowpro};Password=${FLOWPRO_POSTGRES_PASSWORD:-superadmin}
+
+services:
+  # POSTGRES_USER is the administrator, used for backups. FlowPro connects as
+  # FLOWPRO_POSTGRES_USER, an ordinary role created by docker/postgres/initdb
+  # that owns the FlowPro database: a superuser would bypass the row-level
+  # security that keeps workspaces apart.
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${FLOWPRO_POSTGRES_ADMIN_PASSWORD:-postgres-admin}
+      FLOWPRO_POSTGRES_DB: ${FLOWPRO_POSTGRES_DB:-flowpro}
+      FLOWPRO_POSTGRES_USER: ${FLOWPRO_POSTGRES_USER:-flowpro}
+      FLOWPRO_POSTGRES_PASSWORD: ${FLOWPRO_POSTGRES_PASSWORD:-superadmin}
+      # The browser test scripts create databases of their own.
+      FLOWPRO_POSTGRES_CREATEDB: "true"
+    healthcheck:
+      # Over TCP: on first start the init scripts run on a server that listens
+      # only on its socket, so this waits until the FlowPro role exists.
+      test:
+        ["CMD-SHELL", 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - flowpro-postgres:/var/lib/postgresql
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+
+  api:
+    image: ghcr.io/farrukhinomov/flow-pro-api:${FLOWPRO_VERSION:-dev}
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    environment:
+      <<: *connection-string
+      ASPNETCORE_ENVIRONMENT: Development
+      # The API is only reachable through the Caddy container or the loopback
+      # port, so it trusts X-Forwarded-For and X-Forwarded-Proto.
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      ASPNETCORE_HTTP_PORTS: 8080
+      AttachmentStorage__LocalRootPath: /var/lib/flowpro/attachments
+      AttachmentStorage__Provider: Local
+      Authentication__Mode: Session
+      Authentication__Email__AppBaseUrl: http://localhost:${FLOWPRO_HTTP_PORT:-8088}/
+      DataProtection__CertificatePassword: ${FLOWPRO_DATA_PROTECTION_CERTIFICATE_PASSWORD:-}
+      DataProtection__CertificatePath: ${FLOWPRO_DATA_PROTECTION_CERTIFICATE_PATH:-}
+      DataProtection__KeysDirectory: /var/lib/flowpro/dataprotection-keys
+      Database__ApplyMigrationsOnStartup: "true"
+      Database__SeedDevelopmentData: "true"
+      Database__DevelopmentAccountPassword: ${FLOWPRO_DEV_ACCOUNT_PASSWORD:-superadmin}
+      Email__From: no-reply@flowpro.local
+      Email__Smtp__Host: mailpit
+      Email__Smtp__Port: 1025
+      Email__Smtp__Security: None
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:5123:8080"
+    volumes:
+      - flowpro-api-attachments:/var/lib/flowpro/attachments
+      - flowpro-api-data-protection:/var/lib/flowpro/dataprotection-keys
+
+  worker:
+    image: ghcr.io/farrukhinomov/flow-pro-worker:${FLOWPRO_VERSION:-dev}
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    environment:
+      <<: *connection-string
+      DOTNET_ENVIRONMENT: Development
+    depends_on:
+      api:
+        condition: service_started
+
+  # Caddy serves the built web app and proxies /api to the API, so the browser
+  # sees a single origin.
+  web:
+    image: ghcr.io/farrukhinomov/flow-pro-web:${FLOWPRO_VERSION:-dev}
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    environment:
+      FLOWPRO_AUTH_MODE: session
+      FLOWPRO_SITE_ADDRESS: ":80"
+      FLOWPRO_API_UPSTREAM: api:8080
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "${FLOWPRO_HTTP_PORT:-8088}:80"
+    volumes:
+      - flowpro-caddy-data:/data
+      - flowpro-caddy-config:/config
+
+  # Catches outgoing mail for local development. SMTP on :1025 for an API run
+  # from an IDE, web inbox on :8025.
+  mailpit:
+    image: axllent/mailpit:v1.32
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
+  pgadmin:
+    profiles: ["tools"]
+    image: dpage/pgadmin4:9.15
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${FLOWPRO_PGADMIN_EMAIL:-admin@flowpro.local}
+      PGADMIN_DEFAULT_PASSWORD: ${FLOWPRO_PGADMIN_PASSWORD:-superadmin}
+      PGADMIN_DISABLE_POSTFIX: "true"
+      PYTHONWARNINGS: "ignore::SyntaxWarning"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:5050:80"
+    volumes:
+      - flowpro-pgadmin:/var/lib/pgadmin
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+
+volumes:
+  flowpro-api-attachments:
+  flowpro-api-data-protection:
+  flowpro-caddy-config:
+  flowpro-caddy-data:
+  flowpro-pgadmin:
+  flowpro-postgres:

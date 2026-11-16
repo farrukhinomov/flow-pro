@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is not tracked.
+region           = "eu-frankfurt-1"
+tenancy_ocid     = "ocid1.tenancy.oc1..<your tenancy>"
+compartment_ocid = "ocid1.compartment.oc1..<your compartment>"
+
+admin_ssh_public_key  = "ssh-ed25519 AAAA... you@laptop"
+deploy_ssh_public_key = "ssh-ed25519 AAAA... flowpro-deploy"

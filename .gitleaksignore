@@ -1,0 +1,5 @@
+# False positives. Each line is a gitleaks fingerprint.
+# Prose in an old README that the generic-api-key rule misreads:
+e28e4189537cc126d2868eb85a37a1bf8c0ee2c0:README.md:generic-api-key:15
+# An earlier version of this file that quoted that prose:
+819e90618aaea2cca4703d2af2ce04f356c5f33f:.gitleaksignore:generic-api-key:1

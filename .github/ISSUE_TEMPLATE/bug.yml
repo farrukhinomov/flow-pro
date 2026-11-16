@@ -1,0 +1,56 @@
+name: Bug report
+description: Something in FlowPro is broken or behaves wrongly.
+title: "bug: "
+labels: ["type:bug"]
+projects: ["farrukhinomov/3"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, including any error message.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Sign in as ...
+        2. Open ...
+        3. Click ...
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - Demo (flowpro.inomov.online)
+        - Local development
+        - Self-hosted
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Frontend
+        - Backend / API
+        - Sign-in / accounts
+        - Deployment / infrastructure
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Extra context
+      description: Browser, screenshots, logs. Do not paste passwords or tokens.

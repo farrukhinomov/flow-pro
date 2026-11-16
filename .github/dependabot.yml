@@ -1,0 +1,111 @@
+# Monthly dependency updates, on the first of the month: each update PR runs
+# the full CI, which costs Actions minutes. Minor and patch updates come as one
+# PR per ecosystem; each major version gets its own PR, so a breaking change is
+# reviewed and tested on its own. Security updates are not grouped or delayed
+# and arrive as soon as an advisory is published.
+#
+# Commit messages use Conventional Commit prefixes: the PR-title check accepts
+# them, and release-please can parse the squash commits.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule:
+      interval: monthly
+      time: '05:00'
+      timezone: Europe/Berlin
+    # Only versions that have been public for two weeks.
+    cooldown:
+      default-days: 14
+    groups:
+      npm-minor-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      # typescript-eslint supports TypeScript <6.1. Lift together with a
+      # typescript-eslint release that supports 7.x.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # 5.x requires Node 24. Lift together with the move to Node 24 LTS.
+      - dependency-name: license-checker-rseidelsohn
+        update-types: [version-update:semver-major]
+    commit-message:
+      prefix: chore(deps)
+    labels: [type:chore]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: nuget
+    directory: /apps/api
+    schedule:
+      interval: monthly
+      time: '05:00'
+      timezone: Europe/Berlin
+    cooldown:
+      default-days: 14
+    groups:
+      nuget-minor-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+    commit-message:
+      prefix: chore(deps)
+    labels: [type:chore]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+      time: '05:00'
+      timezone: Europe/Berlin
+    cooldown:
+      default-days: 14
+    groups:
+      actions-minor-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+    commit-message:
+      prefix: chore(ci)
+    labels: [type:chore]
+
+  # Base images move by major version only together with the matching
+  # TargetFramework, global.json and .node-version change, never on their own:
+  # an image a major ahead of the code fails to build or to run it.
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: monthly
+      time: '05:00'
+      timezone: Europe/Berlin
+    cooldown:
+      default-days: 14
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+    groups:
+      docker-minor-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+    commit-message:
+      prefix: chore(deps)
+    labels: [type:chore]
+
+  - package-ecosystem: terraform
+    directory: /infra/oracle
+    schedule:
+      interval: monthly
+      time: '05:00'
+      timezone: Europe/Berlin
+    cooldown:
+      default-days: 14
+    # A major provider upgrade needs a regenerated lock file and a review of the
+    # provider changelog, so it is done by hand.
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+    groups:
+      terraform-minor-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+    commit-message:
+      prefix: chore(deps)
+    labels: [type:chore]

@@ -1,0 +1,73 @@
+# Checks the live demo every morning: the web app, its runtime configuration
+# and the API readiness probe, all on DEMO_DOMAIN. A failure opens one
+# `incident` issue (GitHub emails the owner); the issue closes itself once every
+# check passes again. The checks only read. Nothing runs until the repository
+# variable DEMO_DOMAIN is set.
+name: Health check
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: health-check
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    if: vars.DEMO_DOMAIN != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      ORIGIN: https://${{ vars.DEMO_DOMAIN }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Probe the demo
+        id: probe
+        run: |
+          report=""
+          failed=0
+          check() {
+            local name="$1" url="$2" expect="$3" body
+            if body=$(curl --fail --silent --show-error --max-time 20 --retry 2 --retry-delay 10 "$url" 2>&1) \
+              && grep -q -- "$expect" <<<"$body"; then
+              report+="- ✅ ${name}"$'\n'
+            else
+              report+="- ❌ ${name}: \`${url}\`"$'\n'
+              failed=1
+            fi
+          }
+          check "Web app" "$ORIGIN/" "<div id=\"root\""
+          check "Runtime configuration" "$ORIGIN/config.js" "__FLOWPRO_CONFIG__"
+          check "API readiness" "$ORIGIN/health/ready" "Healthy"
+          echo "$report" | tee -a "$GITHUB_STEP_SUMMARY"
+          {
+            echo "failed=$failed"
+            echo "report<<EOF"
+            echo "$report"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open or close the incident issue
+        env:
+          FAILED: ${{ steps.probe.outputs.failed }}
+          REPORT: ${{ steps.probe.outputs.report }}
+        run: |
+          open=$(gh issue list --label incident --state open --json number --jq '.[0].number // empty')
+          body=$(printf '%s\n\nRun: %s\n' "$REPORT" "$RUN_URL")
+          if [ "$FAILED" = "1" ]; then
+            if [ -n "$open" ]; then
+              gh issue comment "$open" --body "Still failing."$'\n\n'"$body"
+            else
+              gh label create incident --color B60205 --description "Live demo health check failed" 2>/dev/null || true
+              gh issue create --title "Demo health check failing" --label incident --body "$body"
+            fi
+          elif [ -n "$open" ]; then
+            gh issue close "$open" --comment "All checks pass again."$'\n\n'"$body"
+          fi

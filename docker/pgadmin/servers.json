@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "FlowPro PostgreSQL",
+      "Group": "FlowPro",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "flowpro",
+      "Username": "postgres",
+      "SSLMode": "prefer"
+    }
+  }
+}

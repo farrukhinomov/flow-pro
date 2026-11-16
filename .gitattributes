@@ -1,0 +1,8 @@
+# Store text files with LF in the repository and check them out with LF on
+# every platform, so formatters and scripts behave the same on Windows.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary

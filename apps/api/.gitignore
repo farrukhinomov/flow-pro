@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+.idea/
+.vs/
+.vscode/*.user
+*.user
+*.suo
+*.nupkg
+TestResults/
+coverage/
+.env
+*.local.json

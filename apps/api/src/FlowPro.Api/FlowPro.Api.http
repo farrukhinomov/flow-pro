@@ -1,0 +1,100 @@
+@host = http://localhost:5123
+@idempotencyKey = {{$guid}}
+@bookingId = replace-with-booking-id
+
+GET {{host}}/health/live
+
+###
+
+GET {{host}}/health/ready
+
+###
+
+GET {{host}}/api/v1/attendance/me/status
+
+###
+
+POST {{host}}/api/v1/attendance/commands/clock-in
+Content-Type: application/json
+Idempotency-Key: {{idempotencyKey}}
+
+{
+  "location": "office",
+  "deviceId": "vscode-rest-client"
+}
+
+###
+
+POST {{host}}/api/v1/attendance/commands/start-break
+Content-Type: application/json
+Idempotency-Key: {{$guid}}
+
+{}
+
+###
+
+POST {{host}}/api/v1/attendance/commands/resume-work
+Content-Type: application/json
+Idempotency-Key: {{$guid}}
+
+{}
+
+###
+
+POST {{host}}/api/v1/attendance/commands/clock-out
+Content-Type: application/json
+Idempotency-Key: {{$guid}}
+
+{}
+
+###
+
+GET {{host}}/api/v1/attendance/me/events
+
+###
+
+POST {{host}}/api/v1/attendance/commands/manual-booking
+Content-Type: application/json
+Idempotency-Key: {{$guid}}
+
+{
+  "type": "clockIn",
+  "occurredAt": "2026-06-04T07:00:00Z",
+  "location": "office",
+  "reason": "Imported missing booking"
+}
+
+###
+
+POST {{host}}/api/v1/attendance/bookings/{{bookingId}}/corrections
+Content-Type: application/json
+Idempotency-Key: {{$guid}}
+
+{
+  "type": "clockIn",
+  "occurredAt": "2026-06-04T07:05:00Z",
+  "location": "office",
+  "reason": "Corrected start time"
+}
+
+###
+
+POST {{host}}/api/v1/attendance/bookings/{{bookingId}}/void
+Content-Type: application/json
+Idempotency-Key: {{$guid}}
+
+{
+  "reason": "Duplicate booking"
+}
+
+###
+
+GET {{host}}/api/v1/sync/changes?after=0&limit=100
+
+###
+
+GET {{host}}/openapi/v1.json
+
+###
+
+GET {{host}}/scalar

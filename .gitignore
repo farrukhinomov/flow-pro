@@ -1,0 +1,43 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+apps/web/test-results/
+
+.env
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Binaries and local tooling never belong in the repository
+*.exe
+*.dll
+apps/api/**/bin/
+apps/api/**/obj/
+.env.*
+!.env.example
+backups/
+
+# Infrastructure state and local settings
+**/.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+backend.hcl
