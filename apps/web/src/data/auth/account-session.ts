@@ -30,6 +30,7 @@ export async function loadWorkspaceSession(): Promise<WorkspaceSessionState> {
     useAuthStore.getState().auth.setUser(
       createSessionAuthUser({
         email: session.email,
+        managedTeams: session.managedTeams,
         name: session.displayName,
         roles: toUserRoles(session.roles),
         userId: session.userId,

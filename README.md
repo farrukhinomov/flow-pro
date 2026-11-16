@@ -16,6 +16,8 @@ locally with Docker.
 
 ![Today screen](docs/assets/screenshots/today.png)
 
+![A manager's approval queue](docs/assets/screenshots/requests.png)
+
 ## What It Shows
 
 | Area | Highlights |

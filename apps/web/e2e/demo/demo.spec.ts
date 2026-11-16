@@ -130,6 +130,22 @@ test.describe('public demo', () => {
     ])
   })
 
+  test('the manager finds their team’s requests waiting for approval', async ({
+    page,
+  }) => {
+    await page.goto('/sign-in')
+    await page.getByRole('button', { name: /Sign in as Manager/ }).click()
+    await expect(page).not.toHaveURL(/\/sign-in/)
+
+    await page.goto('/requests')
+    await page.getByRole('tab', { name: 'Approvals' }).click()
+    const queue = page.getByRole('tabpanel', { name: 'Approvals' })
+    await expect(queue.getByText('Jamie Chen').first()).toBeVisible()
+    await expect(queue.getByText('Lukas Becker').first()).toBeVisible()
+    // Product is led by the admin, so its requests are not this manager's to decide.
+    await expect(queue.getByText('Sofia Rossi')).toHaveCount(0)
+  })
+
   test('the nightly reset wipes everything and seeds the demo again', async ({
     baseURL,
   }) => {

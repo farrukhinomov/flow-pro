@@ -1,3 +1,4 @@
+import { isSessionAuthEnabled } from '@/data/auth/auth-mode'
 import type { EmployeeUser, UserRole } from '@/domain/users/types'
 import { FlowProApiError, flowProApi } from './http-client'
 
@@ -20,6 +21,8 @@ type ApiUserWorkflowRecord = Omit<
   retentionUntil?: string | null
   role: UserRole
   status: ApiUserStatus
+  /** The membership id, which requests, sessions and sync use. */
+  userId?: string | null
 }
 
 type ApiUserWorkflowResult = {
@@ -137,9 +140,16 @@ function mapUserToApi(user: EmployeeUser): ApiUserWorkflowRecord {
   }
 }
 
-function mapUserFromApi(user: ApiUserWorkflowRecord): EmployeeUser {
+function mapUserFromApi({
+  userId,
+  ...user
+}: ApiUserWorkflowRecord): EmployeeUser {
   return {
     ...user,
+    // Signed in for real, a person is their membership id everywhere else: on their requests,
+    // in the session and in the sync feed. Development sign-in keeps the readable client id,
+    // which the HTTP client translates.
+    id: isSessionAuthEnabled() && userId ? userId : user.id,
     createdAt: new Date(user.createdAt),
     deactivatedAt: user.deactivatedAt
       ? new Date(user.deactivatedAt)

@@ -59,7 +59,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<SessionContextValue>(() => {
     const viewer: AppViewer = authUser
       ? {
-          delegatedTeams,
+          delegatedTeams: [
+            ...delegatedTeams,
+            ...(authUser.managedTeams?.slice(1) ?? []),
+          ],
           employeeId: authUser.accountNo,
           id: `viewer-${authUser.accountNo}`,
           managedTeam: authUser.team,

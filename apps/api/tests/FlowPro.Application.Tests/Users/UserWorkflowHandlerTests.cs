@@ -35,6 +35,48 @@ public sealed class UserWorkflowHandlerTests
     }
 
     [Fact]
+    public async Task ListedUsersCarryTheirMembershipId()
+    {
+        TestFixture fixture = new();
+        UserDirectoryProjection anna = CreateProjection("usr-anna-a", "Anna", "Alpha", "employee", "Support");
+        fixture.Repository.Projections.Add(anna);
+
+        UserDirectoryPage result = await fixture.Handler.HandleAsync(new ListUsersQuery(), CancellationToken.None);
+
+        UserWorkflowRecord listed = Assert.Single(result.Items);
+        Assert.Equal("usr-anna-a", listed.Id);
+        Assert.Equal(anna.User.Id, listed.UserId);
+    }
+
+    [Fact]
+    public async Task AnApproverWithoutUsersManageSeesOnlyThemselvesAndTheTeamsTheyLead()
+    {
+        TestFixture fixture = new();
+        fixture.PermissionChecker.DeniedPermissions.Add(PermissionKeys.UsersManage);
+        UserDirectoryProjection self = CreateProjection("usr-sam", "Sam", "Rivera", "manager", "Support", ActorUserId);
+        UserDirectoryProjection led = CreateProjection("usr-anna-a", "Anna", "Alpha", "employee", "Support");
+        UserDirectoryProjection other = CreateProjection("usr-ben-b", "Ben", "Beta", "employee", "Operations");
+        led.Team!.Update(null, "SUPPORT", "Support", "team-support", ActorUserId);
+        fixture.Repository.Projections.AddRange([self, led, other]);
+
+        UserDirectoryPage result = await fixture.Handler.HandleAsync(new ListUsersQuery(), CancellationToken.None);
+
+        Assert.Equal(["usr-sam", "usr-anna-a"], result.Items.Select(user => user.Id));
+    }
+
+    [Fact]
+    public async Task WithoutUsersManageOrRequestsApproveTheDirectoryIsForbidden()
+    {
+        TestFixture fixture = new();
+        fixture.PermissionChecker.DeniedPermissions.Add(PermissionKeys.UsersManage);
+        fixture.PermissionChecker.DeniedPermissions.Add(PermissionKeys.RequestsApprove);
+        fixture.Repository.Projections.Add(CreateProjection("usr-anna-a", "Anna", "Alpha", "employee", "Support"));
+
+        await Assert.ThrowsAsync<FlowProForbiddenException>(
+            () => fixture.Handler.HandleAsync(new ListUsersQuery(), CancellationToken.None));
+    }
+
+    [Fact]
     public async Task ListUsersSupportsCursorPages()
     {
         TestFixture fixture = new();
@@ -368,13 +410,15 @@ public sealed class UserWorkflowHandlerTests
         string firstName,
         string lastName,
         string roleKey,
-        string teamName)
+        string teamName,
+        Guid? userId = null)
     {
         Membership user = new(
             TenantId,
             id,
             $"{firstName}.{lastName}@flowpro.test".ToLowerInvariant(),
-            $"{firstName} {lastName}");
+            $"{firstName} {lastName}",
+            userId);
         Employee employee = new(TenantId, user.Id, id, firstName, lastName);
         Role role = new(TenantId, roleKey, roleKey);
         Team team = new(TenantId, null, teamName, teamName);

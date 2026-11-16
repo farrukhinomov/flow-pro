@@ -72,10 +72,13 @@ internal sealed class UserWorkflowRepository(FlowProDbContext dbContext) : IUser
         CancellationToken cancellationToken)
     {
         string normalizedEmail = email.ToLowerInvariant();
+        Guid? membershipId = Guid.TryParse(clientId, out Guid parsed) ? parsed : null;
         Membership? user = await dbContext.Users
             .Where(user => user.TenantId == tenantId
-                && (user.ExternalSubject == clientId || user.Email == normalizedEmail))
-            .OrderByDescending(user => user.ExternalSubject == clientId)
+                && (user.ExternalSubject == clientId
+                    || user.Id == membershipId
+                    || user.Email == normalizedEmail))
+            .OrderByDescending(user => user.ExternalSubject == clientId || user.Id == membershipId)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (user is null)

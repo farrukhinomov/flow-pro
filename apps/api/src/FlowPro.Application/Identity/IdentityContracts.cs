@@ -13,4 +13,5 @@ public sealed record CurrentSession(
     string Email,
     string DisplayName,
     IReadOnlyList<string> Roles,
-    IReadOnlyList<string> Permissions);
+    IReadOnlyList<string> Permissions,
+    IReadOnlyList<string> ManagedTeams);

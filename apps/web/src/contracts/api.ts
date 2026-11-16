@@ -49,6 +49,8 @@ export type ApiAuthSessionDto = {
   displayName: string
   roles: UserRole[]
   permissions: string[]
+  /** Names of the teams this member leads. */
+  managedTeams?: string[]
 }
 
 export type ApiAttendanceStatusTypeDto = {
@@ -359,6 +361,7 @@ export const apiAuthSessionDtoSchema = z.object({
   displayName: z.string().min(1),
   roles: z.array(userRoleSchema),
   permissions: z.array(z.string().min(1)),
+  managedTeams: z.array(z.string().min(1)).optional(),
 }) satisfies z.ZodType<ApiAuthSessionDto>
 
 export const apiTimeBookingDtoSchema = z.object({

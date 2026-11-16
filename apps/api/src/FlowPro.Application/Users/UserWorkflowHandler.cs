@@ -36,12 +36,31 @@ public sealed class UserWorkflowHandler(
         CancellationToken cancellationToken)
     {
         RequestIdentity identity = requestContext.GetRequiredIdentity();
-        await RequireUsersManageAsync(identity, cancellationToken);
+        bool managesUsers = await permissionChecker.HasPermissionAsync(
+            identity.TenantId,
+            identity.UserId,
+            PermissionKeys.UsersManage,
+            cancellationToken);
+
+        // A manager who approves requests sees the people of the teams they lead, so the approval
+        // queue can show whose request it is. The whole directory needs users.manage.
+        if (!managesUsers
+            && !await permissionChecker.HasPermissionAsync(
+                identity.TenantId,
+                identity.UserId,
+                PermissionKeys.RequestsApprove,
+                cancellationToken))
+        {
+            await RequireUsersManageAsync(identity, cancellationToken);
+        }
 
         IReadOnlyList<UserDirectoryProjection> projections = await repository.ListAsync(
             identity.TenantId,
             cancellationToken);
         UserWorkflowRecord[] users = projections
+            .Where(projection => managesUsers
+                || projection.User.Id == identity.UserId
+                || projection.Team?.ManagerUserId == identity.UserId)
             .Select(Map)
             .Where(user => MatchesFilter(user, query.Filter))
             .ToArray();
@@ -472,7 +491,8 @@ public sealed class UserWorkflowHandler(
             null,
             projection.User.Status == UserStatus.Inactive ? projection.User.UpdatedAt.AddYears(10) : null,
             projection.User.CreatedAt,
-            projection.User.UpdatedAt);
+            projection.User.UpdatedAt,
+            projection.User.Id);
     }
 
     private static bool MatchesFilter(UserWorkflowRecord user, UserDirectoryFilter? filter)

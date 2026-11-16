@@ -57,10 +57,12 @@ test('api contracts: parses backend auth session dto', () => {
     displayName: 'Marta Lindgren',
     roles: ['superadmin'],
     permissions: ['attendance.clock.self', 'attendance.view.self'],
+    managedTeams: ['Customer Success'],
   })
 
   assert.equal(parsed.roles[0], 'superadmin')
   assert.equal(parsed.permissions.length, 2)
+  assert.deepEqual(parsed.managedTeams, ['Customer Success'])
 })
 
 test('api contracts: parses server time booking dto', () => {
