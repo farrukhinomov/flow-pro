@@ -122,8 +122,9 @@ dotnet run --project "${API_PROJECT}" --configuration Release --no-launch-profil
 PIDS+=("$!")
 wait_for_api "${API_LOG}"
 
-# The nightly reset, due within the next one to two minutes, so the suite sees it happen.
-RESET_AT="$(date -u -d '+2 minutes' +%H:%M)"
+# The nightly reset, due two to three minutes from now: late enough that the suite's flows run
+# before it, early enough that the last test sees it happen.
+RESET_AT="$(date -u -d '+3 minutes' +%H:%M)"
 : >"${WORKER_LOG}"
 DOTNET_ENVIRONMENT=Development \
 ConnectionStrings__FlowPro="$(connection flowpro_demo_e2e)" \
