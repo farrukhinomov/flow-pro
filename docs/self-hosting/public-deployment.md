@@ -76,7 +76,7 @@ stack.
 Use the published images. Add the version to `.env`:
 
 ```bash
-FLOWPRO_VERSION=1.0.0
+FLOWPRO_VERSION=0.1.0
 ```
 
 Then start the stack:
