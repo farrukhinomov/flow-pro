@@ -69,6 +69,45 @@ describe('planning capacity', () => {
     assert.equal(days[0].available, 1)
   })
 
+  it('does not flag days nobody in the team is scheduled to work', () => {
+    // 2026-05-09 and 2026-05-10 are a Saturday and a Sunday.
+    const days = calculateTeamCapacity({
+      days: 2,
+      people: [person('one'), person('two')],
+      rules: [{ minimumOnSite: 1, minimumStaff: 2, team: 'Operations' }],
+      startDate: new Date('2026-05-09T12:00:00'),
+    })
+
+    assert.deepEqual(
+      days.map((day) => [day.scheduled, day.status, day.warnings.length]),
+      [
+        [0, 'healthy', 0],
+        [0, 'healthy', 0],
+      ]
+    )
+  })
+
+  it('still flags a working day everyone scheduled is away', () => {
+    const days = calculateTeamCapacity({
+      days: 1,
+      people: [
+        person('one', 'Full-time · Office first', [
+          {
+            category: 'leave',
+            code: 'VAC',
+            date: '2026-05-04',
+            visibility: 'operational',
+          },
+        ]),
+      ],
+      rules: [{ minimumStaff: 1, team: 'Operations' }],
+      startDate: new Date('2026-05-04T12:00:00'),
+    })
+
+    assert.equal(days[0].status, 'conflict')
+    assert.equal(days[0].available, 0)
+  })
+
   it('ranks same-team available cover first', () => {
     const candidates = findCoverageCandidates({
       date: '2026-05-04',

@@ -7,6 +7,7 @@ import {
   listAuditEventsForRequest,
   listEmployeeRequests,
 } from '@/data/local/requests.repo'
+import { listEmployeeUsers } from '@/data/local/users.repo'
 import {
   readCurrentSyncMeta,
   startAttendanceAutoSync,
@@ -29,6 +30,7 @@ import type {
 import type { EmployeeUser } from '@/domain/users/types'
 import { useI18n } from '@/i18n'
 import { toast } from 'sonner'
+import { optionalSource } from '@/lib/optional-source'
 import { useOptimisticList } from '@/hooks/use-optimistic-list'
 import { useSession } from '@/features/access/session-provider'
 import { applyDecisionToRequests } from '../request-view-model'
@@ -69,11 +71,19 @@ export function useEmployeeRequests() {
         nextUsers,
         nextSyncMeta,
       ] = await Promise.all([
-        listAttendanceTypes(),
-        getAttendancePolicyConfigBackendFirst(),
+        optionalSource(listAttendanceTypes(), [], 'absence types'),
+        optionalSource(
+          getAttendancePolicyConfigBackendFirst(),
+          () => getDefaultAttendancePolicyConfig(),
+          'attendance policy'
+        ),
         listEmployeeRequests(),
-        listEmployeeUsersBackendFirst(),
-        readCurrentSyncMeta(),
+        optionalSource(
+          listEmployeeUsersBackendFirst(),
+          () => listEmployeeUsers(),
+          'people'
+        ),
+        optionalSource(readCurrentSyncMeta(), null, 'sync status'),
       ])
 
       setAttendanceTypes(nextAttendanceTypes)

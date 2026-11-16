@@ -1,8 +1,10 @@
 /* eslint-disable no-console */
 type LogContext = Record<string, unknown>
 
+// `import.meta.env` exists only in Vite builds. Outside them, such as in the
+// unit tests, logging stays quiet instead of throwing from an error handler.
 function shouldLogDebug() {
-  return import.meta.env.DEV
+  return import.meta.env?.DEV === true
 }
 
 export const logger = {

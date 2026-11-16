@@ -11,6 +11,7 @@ import {
   listTimeCorrectionsForEmployee,
 } from '@/data/local/attendance.repo'
 import { listEmployeeRequests } from '@/data/local/requests.repo'
+import { listEmployeeUsers } from '@/data/local/users.repo'
 import {
   canSignEmployeeTimesheet,
   canViewFullAudit,
@@ -34,6 +35,8 @@ import type { EmployeeUser } from '@/domain/users/types'
 import { useI18n } from '@/i18n'
 import { toast } from 'sonner'
 import { downloadCsvFile, downloadTextFile } from '@/lib/download'
+import { logger } from '@/lib/logger'
+import { optionalSource } from '@/lib/optional-source'
 import { resolvePeriodWindowBounds } from '@/lib/period-window'
 import {
   formatPeriodMonth,
@@ -202,34 +205,52 @@ function TimesheetPage() {
         : listClockEventsForEmployee(selectedEmployeeId),
       listTimeCorrectionsForEmployee(selectedEmployeeId),
       listEmployeeRequests(),
-      applicationStore.getTimesheetApproval({
-        employeeId: selectedEmployeeId,
-        onSnapshot: ({ data }) => setApproval(data),
-        periodMonth,
-      }),
-      applicationStore.listUsers({
-        onSnapshot: ({ data }) => setUsers(data),
-      }),
-      getAttendancePolicyConfigBackendFirst(),
-    ]).then(
-      ([
-        events,
-        corrections,
-        nextRequests,
-        nextApproval,
-        nextUsers,
-        nextPolicyConfig,
-      ]) => {
-        if (!isMounted) return
+      // The sign-off state, the people picker and the policy frame the ledger;
+      // the bookings themselves must not disappear when one of them fails.
+      optionalSource(
+        applicationStore.getTimesheetApproval({
+          employeeId: selectedEmployeeId,
+          onSnapshot: ({ data }) => setApproval(data),
+          periodMonth,
+        }),
+        null,
+        'timesheet sign-off'
+      ),
+      optionalSource(
+        applicationStore.listUsers({
+          onSnapshot: ({ data }) => setUsers(data),
+        }),
+        () => listEmployeeUsers(),
+        'people'
+      ),
+      optionalSource(
+        getAttendancePolicyConfigBackendFirst(),
+        () => getDefaultAttendancePolicyConfig(),
+        'attendance policy'
+      ),
+    ])
+      .then(
+        ([
+          events,
+          corrections,
+          nextRequests,
+          nextApproval,
+          nextUsers,
+          nextPolicyConfig,
+        ]) => {
+          if (!isMounted) return
 
-        setClockEvents(events)
-        setTimeCorrections(corrections)
-        setRequests(nextRequests)
-        setApproval(nextApproval)
-        setUsers(nextUsers)
-        setPolicyConfig(nextPolicyConfig)
-      }
-    )
+          setClockEvents(events)
+          setTimeCorrections(corrections)
+          setRequests(nextRequests)
+          setApproval(nextApproval)
+          setUsers(nextUsers)
+          setPolicyConfig(nextPolicyConfig)
+        }
+      )
+      .catch((error: unknown) => {
+        logger.error(error, 'Could not load the timesheet')
+      })
 
     return () => {
       isMounted = false

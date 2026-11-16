@@ -15,6 +15,8 @@ import type {
 } from '@/domain/attendance/types'
 import { useI18n } from '@/i18n'
 import { toast } from 'sonner'
+import { logger } from '@/lib/logger'
+import { optionalSource } from '@/lib/optional-source'
 
 export function useAttendancePolicies() {
   const { t } = useI18n()
@@ -24,16 +26,21 @@ export function useAttendancePolicies() {
   const [isLoading, setIsLoading] = useState(true)
 
   const refresh = useCallback(async () => {
-    const [nextTypes, nextConfig, nextSyncMeta] = await Promise.all([
-      listAttendanceTypes(),
-      getAttendancePolicyConfigBackendFirst(),
-      readCurrentSyncMeta(),
-    ])
+    try {
+      const [nextTypes, nextConfig, nextSyncMeta] = await Promise.all([
+        listAttendanceTypes(),
+        getAttendancePolicyConfigBackendFirst(),
+        optionalSource(readCurrentSyncMeta(), null, 'sync status'),
+      ])
 
-    setTypes(nextTypes)
-    setConfig(nextConfig)
-    setSyncMeta(nextSyncMeta)
-    setIsLoading(false)
+      setTypes(nextTypes)
+      setConfig(nextConfig)
+      setSyncMeta(nextSyncMeta)
+    } catch (error) {
+      logger.error(error, 'Could not load the attendance policy')
+    } finally {
+      setIsLoading(false)
+    }
   }, [])
 
   useEffect(() => {

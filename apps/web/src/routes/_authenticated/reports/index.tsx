@@ -37,6 +37,8 @@ import {
   downloadCsvFile,
   downloadTextFile,
 } from '@/lib/download'
+import { logger } from '@/lib/logger'
+import { optionalSource } from '@/lib/optional-source'
 import { resolvePeriodWindowBounds } from '@/lib/period-window'
 import {
   formatPeriodMonth,
@@ -104,29 +106,38 @@ function ReportsPage() {
       : 'all'
 
   const refresh = useCallback(async () => {
-    const [nextReport, policy] = await Promise.all([
-      applicationStore.getReportsPackage({
-        onSnapshot: ({ data }) => {
-          setReport(data)
-          setUsers(
-            data.employeeReports.map(
-              (employeeReport) => employeeReport.employee
+    try {
+      const [nextReport, policy] = await Promise.all([
+        applicationStore.getReportsPackage({
+          onSnapshot: ({ data }) => {
+            setReport(data)
+            setUsers(
+              data.employeeReports.map(
+                (employeeReport) => employeeReport.employee
+              )
             )
-          )
-        },
-        periodMonth,
-      }),
-      getAttendancePolicyConfigBackendFirst(),
-    ])
+          },
+          periodMonth,
+        }),
+        optionalSource(
+          getAttendancePolicyConfigBackendFirst(),
+          () => getDefaultAttendancePolicyConfig(),
+          'attendance policy'
+        ),
+      ])
 
-    setReport(nextReport)
-    setPolicyConfig(policy)
-    setUsers(
-      nextReport.employeeReports.map(
-        (employeeReport) => employeeReport.employee
+      setReport(nextReport)
+      setPolicyConfig(policy)
+      setUsers(
+        nextReport.employeeReports.map(
+          (employeeReport) => employeeReport.employee
+        )
       )
-    )
-    setIsLoading(false)
+    } catch (error) {
+      logger.error(error, 'Could not load the reports')
+    } finally {
+      setIsLoading(false)
+    }
   }, [periodMonth])
 
   useEffect(() => {

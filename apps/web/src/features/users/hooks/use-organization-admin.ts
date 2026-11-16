@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { organizationWorkflow } from '@/application/organization-workflow'
 import { resolveApiErrorMessage } from '@/data/api/api-error'
+import { listEmployeeUsers } from '@/data/local/users.repo'
 import { listOrganizationWorkspaceBackendFirst } from '@/data/organization.gateway'
 import {
   readCurrentSyncMeta,
@@ -20,6 +21,8 @@ import type {
 import type { EmployeeUser } from '@/domain/users/types'
 import { useI18n } from '@/i18n'
 import { toast } from 'sonner'
+import { logger } from '@/lib/logger'
+import { optionalSource } from '@/lib/optional-source'
 
 export function useOrganizationAdmin() {
   const { t } = useI18n()
@@ -32,26 +35,36 @@ export function useOrganizationAdmin() {
   >({})
 
   const refresh = useCallback(async () => {
-    const [nextUsers, organizationWorkspace, nextSyncMeta] = await Promise.all([
-      listEmployeeUsersBackendFirst(),
-      listOrganizationWorkspaceBackendFirst(),
-      readCurrentSyncMeta(),
-    ])
+    try {
+      const [nextUsers, organizationWorkspace, nextSyncMeta] =
+        await Promise.all([
+          optionalSource(
+            listEmployeeUsersBackendFirst(),
+            () => listEmployeeUsers(),
+            'people'
+          ),
+          listOrganizationWorkspaceBackendFirst(),
+          optionalSource(readCurrentSyncMeta(), null, 'sync status'),
+        ])
 
-    setUsers(nextUsers)
-    setCatalog(organizationWorkspace.records)
-    setSyncMeta(nextSyncMeta)
-    setDelegationsByManager(
-      organizationWorkspace.delegations.reduce<Record<string, string[]>>(
-        (acc, item) => {
-          if (!item.active) return acc
-          acc[item.managerId] = [...(acc[item.managerId] ?? []), item.team]
-          return acc
-        },
-        {}
+      setUsers(nextUsers)
+      setCatalog(organizationWorkspace.records)
+      setSyncMeta(nextSyncMeta)
+      setDelegationsByManager(
+        organizationWorkspace.delegations.reduce<Record<string, string[]>>(
+          (acc, item) => {
+            if (!item.active) return acc
+            acc[item.managerId] = [...(acc[item.managerId] ?? []), item.team]
+            return acc
+          },
+          {}
+        )
       )
-    )
-    setIsLoading(false)
+    } catch (error) {
+      logger.error(error, 'Could not load the organization catalog')
+    } finally {
+      setIsLoading(false)
+    }
   }, [])
 
   useEffect(() => {

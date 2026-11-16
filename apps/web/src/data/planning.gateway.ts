@@ -2,6 +2,7 @@ import { eachDayOfInterval, format, parseISO } from 'date-fns'
 import { listAttendanceTypes } from '@/data/local/attendance.repo'
 import { cachePlanningPackage } from '@/data/local/planning-packages.repo'
 import { listEmployeeRequests } from '@/data/local/requests.repo'
+import { listEmployeeUsers } from '@/data/local/users.repo'
 import { listEmployeeUsersBackendFirst } from '@/data/users.gateway'
 import {
   defaultViewer,
@@ -16,6 +17,7 @@ import type {
 import type { PlanningEntry, PlanningPerson } from '@/domain/planning/types'
 import type { EmployeeRequest } from '@/domain/requests/types'
 import type { EmployeeUser } from '@/domain/users/types'
+import { optionalSource } from '@/lib/optional-source'
 import {
   getPlanningPackageWorkflow,
   shouldFallbackToLocalPlanning,
@@ -92,9 +94,13 @@ export async function buildLocalPlanningPackage(
   viewer: AppViewer
 ): Promise<PlanningPackage> {
   const [attendanceTypes, requests, users] = await Promise.all([
-    listAttendanceTypes(),
+    optionalSource(listAttendanceTypes(), [], 'absence types'),
     listEmployeeRequests(),
-    listEmployeeUsersBackendFirst(),
+    optionalSource(
+      listEmployeeUsersBackendFirst(),
+      () => listEmployeeUsers(),
+      'people'
+    ),
   ])
   const typeMap = getTypeMap(attendanceTypes)
   const people = users.map<PlanningPerson>((user) => {

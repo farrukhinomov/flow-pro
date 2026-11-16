@@ -3,6 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { listAuditEventsBackendFirst } from '@/data/audit.gateway'
 import { recordPrivacyAccessEvent } from '@/data/local/audit.repo'
 import { listEmployeeRequests } from '@/data/local/requests.repo'
+import { listEmployeeUsers } from '@/data/local/users.repo'
 import { listEmployeeUsersBackendFirst } from '@/data/users.gateway'
 import { canViewFullAudit } from '@/domain/access/access-control'
 import { verifyAuditTrail } from '@/domain/audit/audit'
@@ -18,6 +19,8 @@ import { useI18n } from '@/i18n'
 import { AlertTriangle, ShieldCheck } from 'lucide-react'
 import { buildCsv } from '@/lib/csv'
 import { downloadCsvFile, downloadJsonFile } from '@/lib/download'
+import { logger } from '@/lib/logger'
+import { optionalSource } from '@/lib/optional-source'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Header } from '@/components/layout/header'
@@ -54,15 +57,25 @@ function AuditPage() {
   const canView = canViewFullAudit(viewer)
 
   const refresh = useCallback(async () => {
-    await listEmployeeRequests()
-    const [nextAuditEvents, nextUsers] = await Promise.all([
-      listAuditEventsBackendFirst(),
-      listEmployeeUsersBackendFirst(),
-    ])
+    try {
+      await listEmployeeRequests()
+      const [nextAuditEvents, nextUsers] = await Promise.all([
+        listAuditEventsBackendFirst(),
+        // Names the actors; the evidence itself does not depend on it.
+        optionalSource(
+          listEmployeeUsersBackendFirst(),
+          () => listEmployeeUsers(),
+          'people'
+        ),
+      ])
 
-    setAuditEvents(nextAuditEvents)
-    setUsers(nextUsers)
-    setIsLoading(false)
+      setAuditEvents(nextAuditEvents)
+      setUsers(nextUsers)
+    } catch (error) {
+      logger.error(error, 'Could not load the audit trail')
+    } finally {
+      setIsLoading(false)
+    }
   }, [])
 
   useEffect(() => {
