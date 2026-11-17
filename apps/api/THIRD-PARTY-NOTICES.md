@@ -15,6 +15,7 @@ change.
 | Microsoft Entity Framework Core | Persistence and migrations | MIT |
 | Npgsql Entity Framework Core provider | PostgreSQL provider | PostgreSQL License |
 | MailKit and MimeKit | Sending email over SMTP | MIT |
+| OpenTelemetry .NET | Traces, metrics and logs over OTLP, off by default | Apache-2.0 |
 | xUnit.net | Testing | Apache-2.0 |
 | coverlet | Test coverage collection | MIT |
 | PostgreSQL container image | Database | PostgreSQL License |

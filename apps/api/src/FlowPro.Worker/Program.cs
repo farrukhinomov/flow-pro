@@ -1,9 +1,11 @@
+using FlowPro.Infrastructure.Observability;
 using FlowPro.Infrastructure.Persistence;
 using FlowPro.Worker;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddJsonConsole();
+builder.AddFlowProTelemetry("flowpro-worker");
 builder.Services.AddFlowProWorker(builder.Configuration);
 
 IHost host = builder.Build();

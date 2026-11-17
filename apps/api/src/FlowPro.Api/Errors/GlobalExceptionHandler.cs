@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using FlowPro.Application.Common;
 using FlowPro.Domain.Common;
 using Microsoft.AspNetCore.Diagnostics;
@@ -37,9 +38,13 @@ internal sealed partial class GlobalExceptionHandler(
                 (StatusCodes.Status500InternalServerError, "server.unexpected", "Unexpected server error"),
         };
 
+        // The W3C trace id when there is one, as ASP.NET Core's own problem details use, so an
+        // error a user reports can be found in the collected traces.
+        string traceId = Activity.Current?.Id ?? httpContext.TraceIdentifier;
+
         if (status >= 500)
         {
-            LogUnhandledException(logger, exception, httpContext.TraceIdentifier);
+            LogUnhandledException(logger, exception, traceId);
         }
         else
         {
@@ -47,7 +52,7 @@ internal sealed partial class GlobalExceptionHandler(
                 logger,
                 exception,
                 code,
-                httpContext.TraceIdentifier);
+                traceId);
         }
 
         ProblemDetails problem = new()
@@ -60,7 +65,7 @@ internal sealed partial class GlobalExceptionHandler(
             Instance = httpContext.Request.Path,
         };
         problem.Extensions["code"] = code;
-        problem.Extensions["traceId"] = httpContext.TraceIdentifier;
+        problem.Extensions["traceId"] = traceId;
 
         httpContext.Response.StatusCode = status;
         await httpContext.Response.WriteAsJsonAsync(problem, cancellationToken);

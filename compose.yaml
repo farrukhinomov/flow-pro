@@ -19,6 +19,12 @@ name: flowpro
 x-connection-string: &connection-string
   ConnectionStrings__FlowPro: Host=postgres;Port=5432;Database=${FLOWPRO_POSTGRES_DB:-flowpro};Username=${FLOWPRO_POSTGRES_USER:-flowpro};Password=${FLOWPRO_POSTGRES_PASSWORD:-superadmin}
 
+# OpenTelemetry traces, metrics and logs, off unless FLOWPRO_OTLP_ENDPOINT
+# names a collector. Nothing is collected or sent by default.
+x-telemetry: &telemetry
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${FLOWPRO_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_PROTOCOL: ${FLOWPRO_OTLP_PROTOCOL:-grpc}
+
 services:
   # POSTGRES_USER is the administrator, used for backups. FlowPro connects as
   # FLOWPRO_POSTGRES_USER, an ordinary role created by docker/postgres/initdb
@@ -54,7 +60,7 @@ services:
       context: .
       dockerfile: docker/api.Dockerfile
     environment:
-      <<: *connection-string
+      <<: [*connection-string, *telemetry]
       ASPNETCORE_ENVIRONMENT: Development
       # The API is only reachable through the Caddy container or the loopback
       # port, so it trusts X-Forwarded-For and X-Forwarded-Proto.
@@ -89,7 +95,7 @@ services:
       context: .
       dockerfile: docker/worker.Dockerfile
     environment:
-      <<: *connection-string
+      <<: [*connection-string, *telemetry]
       DOTNET_ENVIRONMENT: Development
     depends_on:
       api:
