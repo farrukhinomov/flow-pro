@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/farrukhinomov/flow-pro/compare/v0.2.0...v0.2.1) (2026-11-17)
+
+
+### Bug fixes
+
+* stop storing passwords and employee filters in browser storage ([#16](https://github.com/farrukhinomov/flow-pro/issues/16)) ([53b51be](https://github.com/farrukhinomov/flow-pro/commit/53b51be73dc1b1b3428188c38f71c22cadc6b424))
+
 ## [0.2.0](https://github.com/farrukhinomov/flow-pro/compare/v0.1.2...v0.2.0) (2026-11-17)
 
 
