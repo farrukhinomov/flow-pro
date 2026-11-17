@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { isLocalCredentialAuthEnabled } from '@/data/auth/auth-mode'
 import { makeUserId } from '@/domain/users/commands'
 import { upsertLocalUserCredential } from '@/domain/users/local-credentials'
 import { useI18n } from '@/i18n'
@@ -237,11 +238,15 @@ export function UsersActionDialog({
     }
 
     await saveUser(user)
-    upsertLocalUserCredential({
-      email: user.email,
-      password: values.password || undefined,
-      userId: user.id,
-    })
+    // Only the local simulation signs people in from the browser. With a backend the API owns
+    // passwords, and nothing is kept here.
+    if (isLocalCredentialAuthEnabled()) {
+      await upsertLocalUserCredential({
+        email: user.email,
+        password: values.password || undefined,
+        userId: user.id,
+      })
+    }
     form.reset()
     onOpenChange(false)
   }
