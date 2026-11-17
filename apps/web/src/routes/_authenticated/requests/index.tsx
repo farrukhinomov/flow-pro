@@ -47,29 +47,29 @@ export const Route = createFileRoute('/_authenticated/requests/')({
 })
 
 const today = getTodayString()
-const APPROVAL_FILTERS_KEY = 'flowpro.requests.approval-filters'
-const DEFAULT_APPROVAL_FILTERS = {
-  employeeFilter: 'all',
-  kindFilter: 'all',
-} as const
+const ALL = 'all'
+// Only the request type is remembered between visits. Which employee a manager filtered by is
+// personal data, so it is not written to the browser's storage.
+const APPROVAL_KIND_FILTER_KEY = 'flowpro.requests.approval-kind-filter'
+// Earlier builds stored the employee filter here too. It is removed on first use.
+const LEGACY_APPROVAL_FILTERS_KEY = 'flowpro.requests.approval-filters'
 
-function readApprovalFilters() {
-  if (typeof window === 'undefined') {
-    return DEFAULT_APPROVAL_FILTERS
-  }
+function readApprovalKindFilter() {
+  if (typeof window === 'undefined') return ALL
 
   try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(APPROVAL_FILTERS_KEY) ?? '{}'
-    ) as { employeeFilter?: string; kindFilter?: string }
-
-    return {
-      employeeFilter:
-        parsed.employeeFilter ?? DEFAULT_APPROVAL_FILTERS.employeeFilter,
-      kindFilter: parsed.kindFilter ?? DEFAULT_APPROVAL_FILTERS.kindFilter,
-    }
+    window.localStorage.removeItem(LEGACY_APPROVAL_FILTERS_KEY)
+    return window.localStorage.getItem(APPROVAL_KIND_FILTER_KEY) ?? ALL
   } catch {
-    return DEFAULT_APPROVAL_FILTERS
+    return ALL
+  }
+}
+
+function persistApprovalKindFilter(kindFilter: string) {
+  try {
+    window.localStorage.setItem(APPROVAL_KIND_FILTER_KEY, kindFilter)
+  } catch {
+    // Storage can be unavailable, for example in a private window; the filter still applies.
   }
 }
 
@@ -77,7 +77,7 @@ function RequestsPage() {
   const { t } = useI18n()
   const { kind } = Route.useSearch()
   const viewer = useCurrentViewer()
-  const initialApprovalFilters = useMemo(() => readApprovalFilters(), [])
+  const initialApprovalKindFilter = useMemo(() => readApprovalKindFilter(), [])
   const {
     attendanceTypes,
     approveAdjustedRequest,
@@ -92,11 +92,9 @@ function RequestsPage() {
     users,
   } = useEmployeeRequests()
   const [search, setSearch] = useState('')
-  const [approvalEmployeeFilter, setApprovalEmployeeFilter] = useState(
-    initialApprovalFilters.employeeFilter
-  )
+  const [approvalEmployeeFilter, setApprovalEmployeeFilter] = useState(ALL)
   const [approvalKindFilter, setApprovalKindFilter] = useState(
-    initialApprovalFilters.kindFilter
+    initialApprovalKindFilter
   )
   const [selectedApprovalIds, setSelectedApprovalIds] = useState<string[]>([])
   const [reviewRequest, setReviewRequest] = useState<EmployeeRequest | null>(
@@ -142,13 +140,6 @@ function RequestsPage() {
   )
 
   const clearApprovalSelection = () => setSelectedApprovalIds([])
-  const persistApprovalFilters = (next: {
-    employeeFilter: string
-    kindFilter: string
-  }) => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(APPROVAL_FILTERS_KEY, JSON.stringify(next))
-  }
   const managedTeamsLabel = getViewerManagedTeams(viewer).join(', ')
   const canReviewApprovals =
     viewer.role === 'manager' || canViewFullAudit(viewer)
@@ -260,18 +251,11 @@ function RequestsPage() {
               }}
               onEmployeeFilterChange={(value) => {
                 setApprovalEmployeeFilter(value)
-                persistApprovalFilters({
-                  employeeFilter: value,
-                  kindFilter: approvalKindFilter,
-                })
                 clearApprovalSelection()
               }}
               onKindFilterChange={(value) => {
                 setApprovalKindFilter(value)
-                persistApprovalFilters({
-                  employeeFilter: approvalEmployeeFilter,
-                  kindFilter: value,
-                })
+                persistApprovalKindFilter(value)
                 clearApprovalSelection()
               }}
               allRequests={requests}

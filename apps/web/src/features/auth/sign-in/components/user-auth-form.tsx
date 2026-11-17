@@ -10,7 +10,7 @@ import {
   isRegistrationEnabled,
 } from '@/data/auth/auth-mode'
 import { listEmployeeUsers } from '@/data/local/users.repo'
-import { listLocalUserCredentials } from '@/domain/users/local-credentials'
+import { findLocalUserCredential } from '@/domain/users/local-credentials'
 import { useI18n } from '@/i18n'
 import { Loader2, LogIn } from 'lucide-react'
 import { toast } from 'sonner'
@@ -96,15 +96,14 @@ export function UserAuthForm({
     // Loaded on demand rather than imported: this form is part of every build,
     // and a static import would pull the whole demo directory into production.
     const { seedUserCredentials, seedUsers } = await import('@/demo')
-    const credential = [
-      ...seedUserCredentials,
-      ...listLocalUserCredentials(),
-    ].find(
-      (seedCredential) =>
-        seedCredential.email.toLowerCase() === email &&
-        seedCredential.password === password
-    )
     const signIn = sleep(700).then(async () => {
+      const credential =
+        seedUserCredentials.find(
+          (seedCredential) =>
+            seedCredential.email.toLowerCase() === email &&
+            seedCredential.password === password
+        ) ?? (await findLocalUserCredential(email, password))
+
       if (!credential) {
         throw new Error('Invalid local credentials')
       }
