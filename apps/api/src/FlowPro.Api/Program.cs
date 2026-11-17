@@ -24,15 +24,23 @@ using FlowPro.Application;
 using FlowPro.Application.Common;
 using FlowPro.Infrastructure;
 using FlowPro.Infrastructure.Email;
+using FlowPro.Infrastructure.Observability;
 using FlowPro.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.Logging.ClearProviders();
 builder.Logging.AddJsonConsole();
+builder.AddFlowProTelemetry("flowpro-api")
+    ?.WithTracing(tracing => tracing.AddAspNetCoreInstrumentation(options =>
+        // Probes run every few seconds and would drown out real requests.
+        options.Filter = context => !context.Request.Path.StartsWithSegments("/health")))
+    .WithMetrics(metrics => metrics.AddAspNetCoreInstrumentation());
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();

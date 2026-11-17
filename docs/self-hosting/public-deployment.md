@@ -166,6 +166,34 @@ curl -i https://flowpro.example.com/health/ready
 
 Then open the app, register an account and complete the setup wizard.
 
+## Monitor
+
+The API and worker can send OpenTelemetry traces, metrics and logs over OTLP to
+a collector you run, such as the OpenTelemetry Collector, Jaeger or Grafana
+Alloy. It is off by default: nothing is collected or sent until you name a
+collector in `.env`.
+
+```bash
+FLOWPRO_OTLP_ENDPOINT=http://otel-collector:4317
+# grpc (port 4317, the default) or http/protobuf (port 4318).
+FLOWPRO_OTLP_PROTOCOL=grpc
+```
+
+What is sent:
+
+- **Traces:** each API request (health probes left out), each database
+  command with its SQL text but never its parameter values, and outgoing HTTP
+  calls.
+- **Metrics:** request rates and durations, database connection use, and .NET
+  runtime figures such as memory and garbage collection.
+- **Logs:** the same entries the containers write to their output, linked to
+  their traces.
+
+Request paths and SQL text can reveal record ids and table names, so send
+telemetry only to a collector you control. Other standard `OTEL_*` variables,
+such as `OTEL_EXPORTER_OTLP_HEADERS` for a collector that needs a key, can be
+added to the `api` and `worker` services in a compose override.
+
 ## Operate
 
 - Take backups before every upgrade: [backup and restore](backup-restore.md).
