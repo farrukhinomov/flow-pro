@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/farrukhinomov/flow-pro/compare/v0.1.2...v0.2.0) (2026-11-17)
+
+
+### Features
+
+* send OpenTelemetry traces, metrics and logs when a collector is set ([#15](https://github.com/farrukhinomov/flow-pro/issues/15)) ([8fd67ec](https://github.com/farrukhinomov/flow-pro/commit/8fd67ec7f848c478f845e68cb28f09541e145113))
+
+
+### Bug fixes
+
+* drop false weekend staffing conflicts and load pages resiliently ([#13](https://github.com/farrukhinomov/flow-pro/issues/13)) ([02830dc](https://github.com/farrukhinomov/flow-pro/commit/02830dc66a70ef3610f790b2cd6eee7b712d3b06))
+
 ## [0.1.2](https://github.com/farrukhinomov/flow-pro/compare/v0.1.1...v0.1.2) (2026-11-16)
 
 
